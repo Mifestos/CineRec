@@ -53,6 +53,7 @@ def train_model() -> None:
     with open(MODEL_DIR / "mappings.pkl", "wb") as f:
         pickle.dump({
             "user_to_idx": user_to_idx,
+            "movie_to_idx": movie_to_idx,  
             "idx_to_movie": idx_to_movie,
             "sparse_user_item": sparse_user_item
         }, f)
