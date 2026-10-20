@@ -5,7 +5,7 @@ from typing import List
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field, ConfigDict
 
-from cinerec.retrieval.recommender import ALSRecommender
+from cinerec.pipeline import TwoStageRecommender
 
 # Настройка лаконичного логирования (в проде настраивается через dictConfig/YAML)
 logging.basicConfig(
@@ -27,18 +27,12 @@ class MovieRecommendation(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Управление жизненным циклом приложения (Lifespan).
-    Загружаем модель один раз при старте и храним в app.state.
-    """
-    logger.info("Инициализация ALS-модели...")
-    # Привязываем модель к состоянию приложения (Dependency Injection)
-    app.state.recommender = ALSRecommender()
-    logger.info("Модель успешно загружена.")
-    
-    yield # Сервер работает
-    
-    logger.info("Завершение работы сервера, очистка ресурсов...")
+    logger.info("Инициализация двухэтапной рекомендательной системы...")
+    # Заменяем ALSRecommender на TwoStageRecommender
+    app.state.recommender = TwoStageRecommender()
+    logger.info("Модели успешно загружены в память.")
+    yield
+    logger.info("Завершение работы приложения.")
 
 
 # Инициализация приложения
@@ -63,13 +57,10 @@ async def get_recommendations(
     recommender = request.app.state.recommender
     
     try:
-        recs_df = recommender.recommend(user_id, top_n=top_n)
-        return recs_df.reset_index().to_dict(orient="records")
+        # recommend() уже возвращает готовый список словарей!
+        recommendations = recommender.recommend(user_id, top_n=top_n)
+        return recommendations
         
     except ValueError as e:
         logger.warning(f"Пользователь {user_id} не найден: {e}")
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-        
-    except Exception as e:
-        logger.error(f"Ошибка при генерации рекомендаций для {user_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
