@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    container_name: cinerec_api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Монтируем локальные папки, чтобы контейнер видел данные и обученные модели
+      - ./data:/app/data
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1 # Чтобы логи выводились в терминал сразу
