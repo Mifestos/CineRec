@@ -56,15 +56,11 @@ class TwoStageRecommender:
         self.movie_genres = movies.set_index("movieId")[[f"is_{g}" for g in TOP_GENRES]].to_dict(orient="index")
         self.movie_titles = movies.set_index("movieId")[["title", "genres"]].to_dict(orient="index")
 
-        # Предвычисляем средние рейтинги пользователей по жанрам для быстрого инференса
-        ratings = pd.read_csv(DATA_DIR / "ratings.csv")[["userId", "movieId", "rating"]]
-        ratings = ratings.merge(movies[["movieId"] + [f"is_{g}" for g in TOP_GENRES]], on="movieId")
-        
+        # Загружаем предвычисленную статистику по жанрам вместо чтения всего CSV
         self.user_genre_stats = {}
         for genre in TOP_GENRES:
-            genre_df = ratings[ratings[f"is_{genre}"] == 1]
-            user_genre_avg = genre_df.groupby("userId")["rating"].mean().to_dict()
-            self.user_genre_stats[f"user_avg_{genre}"] = user_genre_avg
+            df = pd.read_parquet(PROCESSED_DIR / f"{genre}_stats.parquet")
+            self.user_genre_stats[f"user_avg_{genre}"] = df[f"user_avg_{genre}"].to_dict()
 
     def _get_popular_fallback(self, top_n: int) -> List[Dict[str, Any]]:
         """Возвращает витрину популярных фильмов (Cold Start Fallback)."""
@@ -80,24 +76,21 @@ class TwoStageRecommender:
             })
         return results
 
-    def recommend(self, user_id: int, top_n: int = 10, retrieval_k: int = 50) -> List[Dict[str, Any]]:
+        
+    def recommend(self, user_id: int, top_n: int = 10, retrieval_k: int = 50, filter_already_liked: bool = True) -> List[Dict[str, Any]]:
         """Генерирует топ-N рекомендаций для пользователя."""
         
-        # 1. Проверка на Cold Start
         if not self.retriever.has_user(user_id):
             logger.info("Cold start: user_id=%s. Returning popular items.", user_id)
             return self._get_popular_fallback(top_n)
 
-        # 2. RETRIEVAL: получаем кандидатов
-        candidates = self.retriever.recommend(user_id, top_k=retrieval_k)
+        candidates = self.retriever.recommend(user_id, top_k=retrieval_k, filter_already_liked=filter_already_liked)
         if not candidates:
             return self._get_popular_fallback(top_n)
 
-        # 3. RANKING: формируем признаки
         u_stats = self.user_stats.get(user_id, DEFAULT_USER_STATS)
         features = []
         
-        # Предвычисляем средние рейтинги пользователя по жанрам
         u_genre_features = {}
         for genre in TOP_GENRES:
             u_genre_features[f"user_avg_{genre}"] = self.user_genre_stats[f"user_avg_{genre}"].get(
@@ -123,17 +116,14 @@ class TwoStageRecommender:
                 **u_genre_features
             })
 
-        # Строгий порядок колонок, на которых обучались модели
         feature_cols = ["retrieval_score", "movie_avg_rating", "movie_num_ratings", 
                         "user_avg_rating", "user_num_ratings", "rating_diff", "popularity_score"] \
                        + [f"is_{g}" for g in TOP_GENRES] + [f"user_avg_{g}" for g in TOP_GENRES]
         
         X_rank = pd.DataFrame(features).reindex(columns=feature_cols, fill_value=0)
         
-        # 4. Инференс. Благодаря паттерну Strategy, мы просто вызываем predict()
         scores = self.ranker.predict(X_rank)
 
-        # 5. Формирование итогового ответа
         results = []
         for item, score in zip(candidates, scores):
             movie_id = item["movieId"]

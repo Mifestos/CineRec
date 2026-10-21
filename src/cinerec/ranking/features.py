@@ -49,8 +49,10 @@ def _calculate_retrieval_scores(ratings: pd.DataFrame) -> pd.DataFrame:
     return ratings.drop(columns=["user_idx", "movie_idx"])
 
 
+# В файле src/cinerec/ranking/features.py
+
 def _add_cross_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Добавляет кросс-фичи (взаимодействия) для ранжировщика."""
+    """Добавляет кросс-фичи и сохраняет справочники для инференса."""
     logger.info("Генерация кросс-фичей...")
     
     # 1. Глобальные статистики
@@ -63,37 +65,45 @@ def _add_cross_features(df: pd.DataFrame) -> pd.DataFrame:
         user_num_ratings=("rating", "count")
     )
     
-    df = df.merge(movie_stats, on="movieId").merge(user_stats, on="userId")
+    # СОХРАНЯЕМ СПРАВОЧНИКИ ДЛЯ PIPELINE
+    movie_stats.to_parquet(PROCESSED_DIR / "movie_stats.parquet")
+    user_stats.to_parquet(PROCESSED_DIR / "user_stats.parquet")
+    
+    # Сохраняем популярные фильмы для Cold Start
+    popular_df = movie_stats[movie_stats["movie_num_ratings"] >= 500].sort_values(
+        by=["movie_avg_rating", "movie_num_ratings"], ascending=[False, False]
+    )
+    popular_df.to_parquet(PROCESSED_DIR / "popular_movies.parquet")
+    
+    df = df.merge(movie_stats.reset_index(), on="movieId").merge(user_stats.reset_index(), on="userId")
     
     # 2. Кросс-признаки
     df["rating_diff"] = df["user_avg_rating"] - df["movie_avg_rating"]
     df["popularity_score"] = df["movie_num_ratings"] * df["movie_avg_rating"]
     
-    # 3. Взаимодействие пользователь-жанр
+    # 3. Взаимодействие пользователь-жанр (и сохранение для pipeline)
+    user_genre_stats = {}
     for genre in TOP_GENRES:
         is_genre_col = f"is_{genre}"
-        # Считаем средний рейтинг пользователя для этого жанра
         genre_df = df[df[is_genre_col] == 1]
         user_genre_avg = genre_df.groupby("userId")["rating"].mean().rename(f"user_avg_{genre}")
         
         df = df.merge(user_genre_avg, on="userId", how="left")
-        # Если пользователь не смотрел фильмы этого жанра, ставим его общий средний балл
         df[f"user_avg_{genre}"] = df[f"user_avg_{genre}"].fillna(df["user_avg_rating"])
+        
+        # Сохраняем словарь для pipeline (пока в виде parquet)
+        user_genre_avg.to_frame().to_parquet(PROCESSED_DIR / f"{genre}_stats.parquet")
         
     return df
 
-
 def build_features() -> None:
-    """Создает итоговый датасет с признаками для обучения ранжировщика."""
+    """Создает датасет с признаками и все справочники для API."""
     ratings, movies = _load_base_data()
     ratings = _calculate_retrieval_scores(ratings)
     
     df = ratings.merge(movies[["movieId"] + [f"is_{g}" for g in TOP_GENRES]], on="movieId")
 
-    # Бинарный таргет для Классификатора
     df["target_binary"] = (df["rating"] >= 4.0).astype(int)
-
-    # ИСПРАВЛЕНИЕ: Graded Relevance от 0 до 4 (стандарт LTR)
     df["target_relevance"] = (df["rating"] - 1).astype(int)
     
     df = _add_cross_features(df)
@@ -107,7 +117,7 @@ def build_features() -> None:
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     df[features].to_parquet(PROCESSED_DIR / "ranking_features.parquet", index=False)
     
-    logger.info("Признаки сохранены. Строк: %s, Колонок: %s", f"{len(df):,}", len(features))
+    logger.info("Признаки и справочники сохранены в %s", PROCESSED_DIR)
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ class ALSRetriever(BaseRetriever):
     def has_user(self, user_id: int) -> bool:
         return user_id in self.user_to_idx
 
-    def recommend(self, user_id: int, top_k: int) -> List[Dict[str, Any]]:
+    def recommend(self, user_id: int, top_k: int, filter_already_liked: bool = True) -> List[Dict[str, Any]]:
         if not self.has_user(user_id):
             return []
             
@@ -37,7 +37,7 @@ class ALSRetriever(BaseRetriever):
             user_idx, 
             self.sparse_user_item[user_idx], 
             N=top_k, 
-            filter_already_liked_items=True
+            filter_already_liked_items=filter_already_liked 
         )
         
         return [
