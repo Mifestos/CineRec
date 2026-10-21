@@ -1,0 +1,99 @@
+# CineRec
+
+Production-ready рекомендательная система для стримингового сервиса, построенная на базе датасета MovieLens 25M. Реализует классическую двухэтапную архитектуру, используемую в индустрии (Netflix, Spotify, Яндекс): Retrieval (генерация кандидатов) и Ranking (персонализированное ранжирование).
+
+## Бизнес-ценность и архитектура
+
+В высоконагруженных системах невозможно прогнать всю базу контента (62 000 фильмов) через тяжелую ML-модель за 50 миллисекунд. Проект решает эту проблему с помощью двух этапов:
+
+1. **Retrieval (Stage 1):** Модель матричной факторизации (ALS) быстро отбирает 50 наиболее релевантных кандидатов из 62 000 фильмов на основе скрытых факторов.
+2. **Ranking (Stage 2):** Градиентный бустинг (LightGBM) применяет десятки признаков (популярность фильма, средний рейтинг, жанры, ALS-скор) к 50 кандидатам, вычисляя вероятность того, что пользователю понравится фильм.
+
+**Стек технологий:**
+* **ML:** Python 3.12, Implicit (ALS), LightGBM, Pandas, Scikit-learn
+* **Backend:** FastAPI, Uvicorn, Pydantic
+* **DevOps:** Docker, Docker Compose
+* **Тестирование:** Pytest
+
+## Результаты (Metrics)
+
+* **Датасет:** MovieLens 25M (25 млн оценок, 162 000 пользователей, 62 000 фильмов)
+* **Качество ранжировщика:** ROC-AUC **0.8038**
+* **Время ответа API (Inference):** < 50 мс на запрос (без учета cold start)
+* **Потребление памяти:** ~2.5 GB (загрузка весов моделей и справочников)
+
+## Быстрый старт (Docker)
+
+Для запуска проекта требуется установленный Docker Desktop.
+
+1. Клонируйте репозиторий:
+```bash
+git clone https://github.com/Mifestos/CineRec.git
+cd CineRec
+```
+Подготовьте данные (скачайте MovieLens 25M) и распакуйте ratings.csv, movies.csv в папку data/raw/.
+
+## Обучите модели (опционально, если нет готовых весов):
+
+```bash
+pip install -r requirements.txt
+python src/cinerec/retrieval/train_als.py
+python src/cinerec/ranking/features.py
+python src/cinerec/ranking/train_ranker.py
+```
+Запустите сервис:
+
+```bash
+docker compose up -d --build
+```
+```text
+API будет доступно по адресу: http://localhost:8000. 
+Документация Swagger: http://localhost:8000/docs.
+```
+Пример запроса:
+
+```bash
+curl "http://localhost:8000/api/v1/recommend/1?top_n=5"
+```
+Пример ответа:
+```json
+json
+[
+  {
+    "movieId": 3089,
+    "title": "Bicycle Thieves (a.k.a. The Bicycle Thief) (a.k.a. The Bicycle Thieves) (Ladri di biciclette) (1948)",
+    "genres": "Drama",
+    "score": 0.8550311239048133
+  },
+  {
+    "movieId": 1232,
+    "title": "Stalker (1979)",
+    "genres": "Drama|Mystery|Sci-Fi",
+    "score": 0.8548460316116894
+  }
+]
+```
+## Структура проекта
+Проект использует src-layout для изоляции кода от данных и конфигураций.
+
+```text
+├── data/                  # Сырые данные и Parquet-файлы с признаками
+├── models/                # Веса обученных моделей (ALS, LightGBM)
+├── src/cinerec/
+│   ├── api/               # FastAPI приложение (main, routes, schemas)
+│   ├── ranking/           # Feature Engineering и обучение LightGBM
+│   ├── retrieval/         # Обучение и инференс ALS
+│   └── pipeline.py        # Класс TwoStageRecommender (объединяет оба этапа)
+├── tests/                 # Unit-тесты (Pytest)
+├── Dockerfile             # Инструкция сборки образа
+├── docker-compose.yml     # Оркестрация контейнеров
+└── requirements.txt       # Зависимости (с фиксированными версиями)
+```
+## Планы по развитию (Roadmap)
+```text
+□ Внедрение кэширования (Redis) для исключения повторных вычислений для популярных пользователей.
+□ Проведение A/B-тестирования (эмуляция онлайн-трафика) для оценки бизнес-метрик.
+□ Переход от классического ALS к Two-Tower Neural Network (PyTorch) для улучшения качества Retrieval.
+```
+## Автор
+Mifestos
