@@ -27,13 +27,9 @@ async def get_recommendations(
     
     try:
         recommendations = request.app.state.recommender.recommend(user_id, top_n)
-        # Кэшируем на час (3600 секунд)
         await request.app.state.redis.setex(cache_key, 3600, json.dumps(recommendations))
         return recommendations
         
-    except ValueError as e:
-        logger.warning("User not found: %s", e)
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
     except Exception as e:
         logger.error("Recommendation failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")

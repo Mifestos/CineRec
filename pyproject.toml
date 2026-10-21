@@ -17,3 +17,6 @@ markers = [
     "integration: marks tests as slow integration tests (deselect with '-m \"not integration\"')"
 ]
 addopts = "-v --cov=src/cinerec --cov-report=term-missing"
+filterwarnings = [
+    "ignore::DeprecationWarning:starlette.*", 
+]

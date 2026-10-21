@@ -38,11 +38,10 @@ class TwoStageRecommender:
 
         self._load_reference_data()
 
+    # Внутри метода _load_reference_data(self) добавьте расчет популярных фильмов:
     def _load_reference_data(self) -> None:
-        """Загружает и подготавливает статистики пользователей и фильмов."""
         ratings = pd.read_csv(DATA_DIR / "ratings.csv")[["userId", "movieId", "rating"]]
         
-        # Словари со статистикой
         self.movie_stats = ratings.groupby("movieId").agg(
             movie_avg_rating=("rating", "mean"),
             movie_num_ratings=("rating", "count")
@@ -53,19 +52,33 @@ class TwoStageRecommender:
             user_num_ratings=("rating", "count")
         ).to_dict(orient="index")
 
-        # Метаданные фильмов
+        # --- НОВОЕ: Расчет популярных фильмов для Cold Start ---
+        # Берем фильмы с более чем 500 оценками и сортируем по среднему рейтингу
+        popular_df = ratings.groupby("movieId").agg(
+            avg_rating=("rating", "mean"),
+            num_ratings=("rating", "count")
+        )
+        popular_df = popular_df[popular_df["num_ratings"] >= 500]
+        self.popular_movie_ids = popular_df.sort_values(
+            by=["avg_rating", "num_ratings"], ascending=[False, False]
+        ).index.tolist()
+        # --------------------------------------------------------
+
         movies = pd.read_csv(DATA_DIR / "movies.csv")
         movies["genres"] = movies["genres"].fillna("")
         for genre in TOP_GENRES:
             movies[f"is_{genre}"] = movies["genres"].str.contains(genre).astype(int)
             
-        self.movie_genres = movies.set_index("movieId")[ [f"is_{g}" for g in TOP_GENRES] ].to_dict(orient="index")
+        self.movie_genres = movies.set_index("movieId")[[f"is_{g}" for g in TOP_GENRES]].to_dict(orient="index")
         self.movie_titles = movies.set_index("movieId")[["title", "genres"]].to_dict(orient="index")
 
     def recommend(self, user_id: int, top_n: int = 10, retrieval_k: int = 50) -> List[Dict[str, Any]]:
-        """Возвращает топ-N рекомендаций для заданного пользователя."""
+        """Возвращает топ-N рекомендаций (с фолбэком для новых пользователей)."""
+        
+        # Если пользователя нет в базе — отдаем популярное (Cold Start Fallback)
         if user_id not in self.user_to_idx:
-            raise ValueError(f"User ID {user_id} not found in training data.")
+            logger.info(f"Cold start: user {user_id} not found. Returning popular items.")
+            return self._get_popular_fallback(top_n)
 
         user_idx = self.user_to_idx[user_id]
 
@@ -118,3 +131,20 @@ class TwoStageRecommender:
 
         # Сортировка по убыванию скора LightGBM
         return sorted(results, key=lambda x: x["score"], reverse=True)[:top_n]
+
+    def _get_popular_fallback(self, top_n: int) -> List[Dict[str, Any]]:
+        """Возвращает список популярных фильмов для новых пользователей."""
+        results = []
+        for movie_id in self.popular_movie_ids[:top_n]:
+            meta = self.movie_titles.get(movie_id, {"title": "Unknown", "genres": ""})
+            # В качестве скора используем средний рейтинг, нормированный от 0 до 1
+            stats = self.movie_stats.get(movie_id, {"movie_avg_rating": 0.0})
+            score = float(stats["movie_avg_rating"] / 5.0) 
+            
+            results.append({
+                "movieId": int(movie_id),
+                "title": meta["title"],
+                "genres": meta["genres"],
+                "score": score
+            })
+        return results

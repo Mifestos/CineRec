@@ -25,15 +25,17 @@ def test_recommend_invalid_top_n(client, invalid_top_n):
     # FastAPI автоматически возвращает 422 Unprocessable Entity при ошибке валидации
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-def test_recommend_user_not_found(client, mock_recommender):
-    """Проверка обработки ошибки, если пользователь не найден."""
-    # Настраиваем мок так, чтобы он выбрасывал ValueError
-    mock_recommender.recommend.side_effect = ValueError("User not found")
+def test_recommend_cold_start_fallback(client, mock_recommender):
+    """Тест: для несуществующего пользователя отдается фолбэк (популярное)."""
+    # Настраиваем мок так, чтобы он имитировал фолбэк
+    mock_recommender.recommend.return_value = [
+        {"movieId": 999, "title": "Popular Movie", "genres": "Action", "score": 0.9}
+    ]
     
-    response = client.get("/api/v1/recommend/999")
+    response = client.get("/api/v1/recommend/999999")   
     
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["detail"] == "Пользователь не найден"
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()[0]["title"] == "Popular Movie"
 
 def test_recommend_cache_hit(client, mock_redis):
     """Проверка логики: если данные есть в Redis, модель не вызывается."""
