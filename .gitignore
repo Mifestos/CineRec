@@ -11,3 +11,5 @@ models/*
 .env
 *.egg-info/
 src/cinerec.egg-info/
+.coverage
+.coverage.*

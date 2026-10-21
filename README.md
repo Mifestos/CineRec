@@ -1,5 +1,7 @@
 # CineRec
 
+![Tests](https://github.com/Mifestos/CineRec/actions/workflows/python-tests.yml/badge.svg?branch=main)
+
 Production-ready рекомендательная система для стримингового сервиса, построенная на базе датасета MovieLens 25M. Реализует классическую двухэтапную архитектуру, используемую в индустрии (Netflix, Spotify, Яндекс): Retrieval (генерация кандидатов) и Ranking (персонализированное ранжирование).
 
 ## Бизнес-ценность и архитектура
