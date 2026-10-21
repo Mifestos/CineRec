@@ -7,62 +7,46 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import pandas as pd
-from implicit.als import AlternatingLeastSquares
+
+from cinerec.retrieval.base import BaseRetriever
+from cinerec.ranking.base import BaseRanker
+from cinerec.retrieval.als_retriever import ALSRetriever
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path("data/raw")
+PROCESSED_DIR = Path("data/processed")
 MODEL_DIR = Path("models")
+
 TOP_GENRES = ["Action", "Comedy", "Drama", "Horror", "Romance"]
 DEFAULT_USER_STATS = {"user_avg_rating": 3.5, "user_num_ratings": 0}
 DEFAULT_MOVIE_STATS = {"movie_avg_rating": 3.5, "movie_num_ratings": 0}
 
 
 class TwoStageRecommender:
-    """Двухэтапная рекомендательная система (ALS Retrieval -> LightGBM Ranking)."""
+    """Двухэтапный рекомендательный пайплайн (Retrieval + Ranking)."""
 
-    def __init__(self) -> None:
-        logger.info("Инициализация пайплайна: загрузка моделей и справочников...")
+    def __init__(self, retriever: BaseRetriever = None, ranker: BaseRanker = None) -> None:
+        logger.info("Инициализация пайплайна...")
         
-        self.als_model = AlternatingLeastSquares().load(MODEL_DIR / "als_model.npz")
+        # Dependency Injection: если модель не передана, берем дефолтную
+        self.retriever = retriever if retriever else ALSRetriever()
         
-        with open(MODEL_DIR / "mappings.pkl", "rb") as f:
-            data = pickle.load(f)
-            # Принудительно приводим ключи к int для стабильного маппинга из API
-            self.user_to_idx = {int(k): v for k, v in data["user_to_idx"].items()}
-            self.idx_to_movie = {int(k): v for k, v in data["idx_to_movie"].items()}
-            self.sparse_user_item = data["sparse_user_item"]
-            
-        with open(MODEL_DIR / "ranker.pkl", "rb") as f:
-            self.ranker = pickle.load(f)
+        if ranker is None:
+            logger.info("Загрузка дефолтного ранжировщика (LGBMClassifier)...")
+            with open(MODEL_DIR / "ranker_classifier.pkl", "rb") as f:
+                self.ranker = pickle.load(f)
+        else:
+            self.ranker = ranker
 
         self._load_reference_data()
 
-    # Внутри метода _load_reference_data(self) добавьте расчет популярных фильмов:
     def _load_reference_data(self) -> None:
-        ratings = pd.read_csv(DATA_DIR / "ratings.csv")[["userId", "movieId", "rating"]]
-        
-        self.movie_stats = ratings.groupby("movieId").agg(
-            movie_avg_rating=("rating", "mean"),
-            movie_num_ratings=("rating", "count")
-        ).to_dict(orient="index")
-        
-        self.user_stats = ratings.groupby("userId").agg(
-            user_avg_rating=("rating", "mean"),
-            user_num_ratings=("rating", "count")
-        ).to_dict(orient="index")
-
-        # --- НОВОЕ: Расчет популярных фильмов для Cold Start ---
-        # Берем фильмы с более чем 500 оценками и сортируем по среднему рейтингу
-        popular_df = ratings.groupby("movieId").agg(
-            avg_rating=("rating", "mean"),
-            num_ratings=("rating", "count")
-        )
-        popular_df = popular_df[popular_df["num_ratings"] >= 500]
-        self.popular_movie_ids = popular_df.sort_values(
-            by=["avg_rating", "num_ratings"], ascending=[False, False]
-        ).index.tolist()
-        # --------------------------------------------------------
+        """Загружает предвычисленные статистики и метаданные для инференса."""
+        logger.info("Загрузка справочников...")
+        self.movie_stats = pd.read_parquet(PROCESSED_DIR / "movie_stats.parquet").to_dict(orient="index")
+        self.user_stats = pd.read_parquet(PROCESSED_DIR / "user_stats.parquet").to_dict(orient="index")
+        self.popular_movie_ids = pd.read_parquet(PROCESSED_DIR / "popular_movies.parquet").index.tolist()
 
         movies = pd.read_csv(DATA_DIR / "movies.csv")
         movies["genres"] = movies["genres"].fillna("")
@@ -72,79 +56,93 @@ class TwoStageRecommender:
         self.movie_genres = movies.set_index("movieId")[[f"is_{g}" for g in TOP_GENRES]].to_dict(orient="index")
         self.movie_titles = movies.set_index("movieId")[["title", "genres"]].to_dict(orient="index")
 
-    def recommend(self, user_id: int, top_n: int = 10, retrieval_k: int = 50) -> List[Dict[str, Any]]:
-        """Возвращает топ-N рекомендаций (с фолбэком для новых пользователей)."""
+        # Предвычисляем средние рейтинги пользователей по жанрам для быстрого инференса
+        ratings = pd.read_csv(DATA_DIR / "ratings.csv")[["userId", "movieId", "rating"]]
+        ratings = ratings.merge(movies[["movieId"] + [f"is_{g}" for g in TOP_GENRES]], on="movieId")
         
-        # Если пользователя нет в базе — отдаем популярное (Cold Start Fallback)
-        if user_id not in self.user_to_idx:
-            logger.info(f"Cold start: user {user_id} not found. Returning popular items.")
+        self.user_genre_stats = {}
+        for genre in TOP_GENRES:
+            genre_df = ratings[ratings[f"is_{genre}"] == 1]
+            user_genre_avg = genre_df.groupby("userId")["rating"].mean().to_dict()
+            self.user_genre_stats[f"user_avg_{genre}"] = user_genre_avg
+
+    def _get_popular_fallback(self, top_n: int) -> List[Dict[str, Any]]:
+        """Возвращает витрину популярных фильмов (Cold Start Fallback)."""
+        results = []
+        for movie_id in self.popular_movie_ids[:top_n]:
+            meta = self.movie_titles.get(movie_id, {"title": "Unknown", "genres": ""})
+            stats = self.movie_stats.get(movie_id, {"movie_avg_rating": 0.0})
+            results.append({
+                "movieId": int(movie_id),
+                "title": meta["title"],
+                "genres": meta["genres"],
+                "score": float(stats["movie_avg_rating"] / 5.0)
+            })
+        return results
+
+    def recommend(self, user_id: int, top_n: int = 10, retrieval_k: int = 50) -> List[Dict[str, Any]]:
+        """Генерирует топ-N рекомендаций для пользователя."""
+        
+        # 1. Проверка на Cold Start
+        if not self.retriever.has_user(user_id):
+            logger.info("Cold start: user_id=%s. Returning popular items.", user_id)
             return self._get_popular_fallback(top_n)
 
-        user_idx = self.user_to_idx[user_id]
+        # 2. RETRIEVAL: получаем кандидатов
+        candidates = self.retriever.recommend(user_id, top_k=retrieval_k)
+        if not candidates:
+            return self._get_popular_fallback(top_n)
 
-        # 1. RETRIEVAL: получаем кандидатов
-        item_ids, als_scores = self.als_model.recommend(
-            user_idx, 
-            self.sparse_user_item[user_idx], 
-            N=retrieval_k, 
-            filter_already_liked_items=True
-        )
-        
-        # Приводим к int, чтобы избежать ошибок с numpy.int64 при поиске в словарях
-        movie_ids = [int(self.idx_to_movie[idx]) for idx in item_ids]
-
-        # 2. RANKING: генерация фичей
+        # 3. RANKING: формируем признаки
         u_stats = self.user_stats.get(user_id, DEFAULT_USER_STATS)
         features = []
         
-        for movie_id, als_score in zip(movie_ids, als_scores):
+        # Предвычисляем средние рейтинги пользователя по жанрам
+        u_genre_features = {}
+        for genre in TOP_GENRES:
+            u_genre_features[f"user_avg_{genre}"] = self.user_genre_stats[f"user_avg_{genre}"].get(
+                user_id, u_stats["user_avg_rating"]
+            )
+
+        for item in candidates:
+            movie_id = item["movieId"]
+            retrieval_score = item["score"]
+            
             m_stats = self.movie_stats.get(movie_id, DEFAULT_MOVIE_STATS)
             m_genres = self.movie_genres.get(movie_id, {f"is_{g}": 0 for g in TOP_GENRES})
             
             features.append({
-                "als_score": float(als_score),
-                "movie_avg_rating": float(m_stats["movie_avg_rating"]),
-                "movie_num_ratings": float(m_stats["movie_num_ratings"]),
-                "user_avg_rating": float(u_stats["user_avg_rating"]),
-                "user_num_ratings": float(u_stats["user_num_ratings"]),
-                **m_genres
+                "retrieval_score": retrieval_score,
+                "movie_avg_rating": m_stats["movie_avg_rating"],
+                "movie_num_ratings": m_stats["movie_num_ratings"],
+                "user_avg_rating": u_stats["user_avg_rating"],
+                "user_num_ratings": u_stats["user_num_ratings"],
+                "rating_diff": u_stats["user_avg_rating"] - m_stats["movie_avg_rating"],
+                "popularity_score": m_stats["movie_num_ratings"] * m_stats["movie_avg_rating"],
+                **m_genres,
+                **u_genre_features
             })
 
-        # 3. Инференс LightGBM
-        # Явно указываем порядок колонок, чтобы LightGBM не ругался
-        feature_cols = ["als_score", "movie_avg_rating", "movie_num_ratings", 
-                        "user_avg_rating", "user_num_ratings"] + [f"is_{g}" for g in TOP_GENRES]
+        # Строгий порядок колонок, на которых обучались модели
+        feature_cols = ["retrieval_score", "movie_avg_rating", "movie_num_ratings", 
+                        "user_avg_rating", "user_num_ratings", "rating_diff", "popularity_score"] \
+                       + [f"is_{g}" for g in TOP_GENRES] + [f"user_avg_{g}" for g in TOP_GENRES]
         
-        X_rank = pd.DataFrame(features)[feature_cols]
-        lgb_scores = self.ranker.predict_proba(X_rank)[:, 1]
+        X_rank = pd.DataFrame(features).reindex(columns=feature_cols, fill_value=0)
+        
+        # 4. Инференс. Благодаря паттерну Strategy, мы просто вызываем predict()
+        scores = self.ranker.predict(X_rank)
 
-        # 4. Формирование ответа
+        # 5. Формирование итогового ответа
         results = []
-        for movie_id, lgb_score in zip(movie_ids, lgb_scores):
+        for item, score in zip(candidates, scores):
+            movie_id = item["movieId"]
             meta = self.movie_titles.get(movie_id, {"title": "Unknown", "genres": ""})
             results.append({
                 "movieId": movie_id,
                 "title": meta["title"],
                 "genres": meta["genres"],
-                "score": float(lgb_score)
+                "score": float(score)
             })
 
-        # Сортировка по убыванию скора LightGBM
         return sorted(results, key=lambda x: x["score"], reverse=True)[:top_n]
-
-    def _get_popular_fallback(self, top_n: int) -> List[Dict[str, Any]]:
-        """Возвращает список популярных фильмов для новых пользователей."""
-        results = []
-        for movie_id in self.popular_movie_ids[:top_n]:
-            meta = self.movie_titles.get(movie_id, {"title": "Unknown", "genres": ""})
-            # В качестве скора используем средний рейтинг, нормированный от 0 до 1
-            stats = self.movie_stats.get(movie_id, {"movie_avg_rating": 0.0})
-            score = float(stats["movie_avg_rating"] / 5.0) 
-            
-            results.append({
-                "movieId": int(movie_id),
-                "title": meta["title"],
-                "genres": meta["genres"],
-                "score": score
-            })
-        return results
