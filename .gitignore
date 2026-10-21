@@ -13,3 +13,5 @@ models/*
 src/cinerec.egg-info/
 .coverage
 .coverage.*
+mlflow.db
+mlruns/
