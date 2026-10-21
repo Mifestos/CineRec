@@ -110,6 +110,19 @@ Integration-тесты: Проверка реального пайплайна A
 ```bash
 pytest -m "not integration"
 ```
+### CI/CD (Continuous Integration)
+
+Проект настроен на автоматический запуск тестов при каждом пуше в ветки `main` и `develop`. 
+Конфигурация находится в файле `.github/workflows/python-tests.yml`.
+
+При создании Pull Request или пуше GitHub Actions:
+1. Поднимает чистую виртуальную машину (Ubuntu).
+2. Устанавливает зависимости из `requirements.txt`.
+3. Запускает Unit-тесты (`pytest -m "not integration"`).
+4. Выводит отчет о покрытии (Coverage).
+
+**Статус сборки:** [GitHub Actions](https://github.com/Mifestos/CineRec/actions)
+
 ## Нагрузочное тестирование (Load Testing)
 
 Для проверки стабильности API под высокой нагрузкой используется **Locust**. Тестирование имитирует поведение сотен пользователей, одновременно запрашивающих рекомендации.
@@ -150,8 +163,6 @@ locust -f locustfile.py --host=http://localhost:8000
 ```
 ## Планы по развитию (Roadmap)
 ```text
-□ Внедрение CI/CD (GitHub Actions) для автоматического запуска тестов при пуше.
-□ Проведение A/B-тестирования (эмуляция онлайн-трафика) для оценки бизнес-метрик.
 □ Переход от классического ALS к Two-Tower Neural Network (PyTorch) для улучшения качества Retrieval.
 ```
 ## Автор
