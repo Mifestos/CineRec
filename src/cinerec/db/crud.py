@@ -1,7 +1,9 @@
+from typing import List
 from sqlalchemy.orm import Session
 
-from cinerec.db.models import User, Rating, Movie
+from cinerec.db.models import User, Rating, Movie, Review
 from cinerec.core.security import get_password_hash
+from cinerec.nlp.sentiment import analyze_sentiment, analyze_aspects
 
 
 # ==========================================
@@ -67,3 +69,43 @@ def create_or_update_rating(db: Session, user_id: int, movie_id: int, score: flo
     db.commit()
     db.refresh(new_rating)
     return new_rating
+
+
+# ==========================================
+# Операции с отзывами (Reviews)
+# ==========================================
+def create_review(db: Session, user_id: int, movie_id: int, text: str) -> Review:
+    """
+    Создает отзыв, прогоняет текст через NLP-модели 
+    и сохраняет результаты анализа в БД.
+    """
+    # 1. Вызываем NLP-модуль
+    sentiment, score = analyze_sentiment(text)
+    aspects = analyze_aspects(text)
+    
+    # 2. Создаем запись в БД
+    db_review = Review(
+        user_id=user_id,
+        movie_id=movie_id,
+        text=text,
+        sentiment=sentiment,
+        sentiment_score=score,
+        aspects=aspects
+    )
+    
+    db.add(db_review)
+    db.commit()
+    db.refresh(db_review)
+    return db_review
+
+
+def get_reviews_by_movie(db: Session, movie_id: int, skip: int = 0, limit: int = 50) -> List[Review]:
+    """Возвращает список отзывов для фильма с пагинацией."""
+    return (
+        db.query(Review)
+        .filter(Review.movie_id == movie_id)
+        .order_by(Review.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )

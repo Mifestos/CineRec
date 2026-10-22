@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # ==========================================
 # Схемы для Аутентификации и Пользователей
@@ -25,6 +25,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: Optional[int] = None
 
+
 # ==========================================
 # Схемы для Оценок (Ratings)
 # ==========================================
@@ -41,22 +42,34 @@ class RatingResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 # ==========================================
-# Схемы для Отзывов (Reviews)
+# Схемы для Отзывов (Reviews) — v2.0
 # ==========================================
 class ReviewCreate(BaseModel):
     movie_id: int = Field(..., description="ID фильма")
-    text: str = Field(..., min_length=10, description="Текст отзыва (минимум 10 символов)")
+    text: str = Field(
+        ..., 
+        min_length=10, 
+        max_length=2000, 
+        description="Текст отзыва (от 10 до 2000 символов)"
+    )
 
 class ReviewResponse(BaseModel):
     id: int
     user_id: int
     movie_id: int
     text: str
-    sentiment: Optional[str] = None # positive, negative, neutral
+    
+    # Результаты NLP-анализа
+    sentiment: Optional[str] = Field(None, description="Общая тональность (positive/negative/neutral)")
+    sentiment_score: Optional[float] = Field(None, description="Уверенность модели (0.0 - 1.0)")
+    aspects: Optional[Dict[str, Any]] = Field(None, description="Тональность по аспектам (plot, actors, music и т.д.)")
+    
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 # ==========================================
 # Схемы для Рекомендаций (ML)

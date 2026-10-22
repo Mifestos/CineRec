@@ -1,11 +1,14 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import ForeignKey, String, Float, Integer, DateTime, Text
+
+from sqlalchemy import ForeignKey, String, Float, Integer, DateTime, Text, JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
 
 class Base(DeclarativeBase):
     """Базовый класс для всех ORM-моделей."""
     pass
+
 
 class User(Base):
     __tablename__ = "users"
@@ -16,8 +19,13 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    ratings: Mapped[List["Rating"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    reviews: Mapped[List["Review"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    ratings: Mapped[List["Rating"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    reviews: Mapped[List["Review"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
 
 class Movie(Base):
     __tablename__ = "movies"
@@ -30,8 +38,13 @@ class Movie(Base):
     poster_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     release_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    ratings: Mapped[List["Rating"]] = relationship(back_populates="movie", cascade="all, delete-orphan")
-    reviews: Mapped[List["Review"]] = relationship(back_populates="movie", cascade="all, delete-orphan")
+    ratings: Mapped[List["Rating"]] = relationship(
+        back_populates="movie", cascade="all, delete-orphan"
+    )
+    reviews: Mapped[List["Review"]] = relationship(
+        back_populates="movie", cascade="all, delete-orphan"
+    )
+
 
 class Rating(Base):
     __tablename__ = "ratings"
@@ -45,6 +58,7 @@ class Rating(Base):
     user: Mapped["User"] = relationship(back_populates="ratings")
     movie: Mapped["Movie"] = relationship(back_populates="ratings")
 
+
 class Review(Base):
     __tablename__ = "reviews"
 
@@ -52,7 +66,12 @@ class Review(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id", ondelete="CASCADE"))
     text: Mapped[str] = mapped_column(Text)
-    sentiment: Mapped[Optional[str]] = mapped_column(String(20), nullable=True) # positive/negative/neutral
+
+    # Результаты NLP-анализа
+    sentiment: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    sentiment_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    aspects: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="reviews")
