@@ -14,10 +14,9 @@ class RecommenderUser(HttpUser):
         user_id = random.choice(VALID_USER_IDS)
         top_n = random.choice(TOP_N_OPTIONS)
         
-        # ДОБАВЛЯЕМ name, чтобы Locust группировал все эти запросы в одну строку
         with self.client.get(
             f"/api/v1/recommend/{user_id}?top_n={top_n}", 
-            name="/api/v1/recommend/[user_id]?top_n=[top_n]", # <--- Группировка
+            name="/api/v1/recommend/[user_id]?top_n=[top_n]", 
             catch_response=True
         ) as response:
             if response.status_code != 200:

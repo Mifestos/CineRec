@@ -10,13 +10,37 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://cinerec_user:cinerec_password@db:5432/cinerec_db
+      - SECRET_KEY=local_dev_secret_key_change_me_in_production
     depends_on:
       redis:
         condition: service_started
+      db:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
     container_name: cinerec_redis
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes  
+    command: redis-server --appendonly yes
+
+  db:
+    image: postgres:16-alpine
+    container_name: cinerec_db
+    environment:
+      POSTGRES_USER: cinerec_user
+      POSTGRES_PASSWORD: cinerec_password
+      POSTGRES_DB: cinerec_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinerec_user -d cinerec_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata: 

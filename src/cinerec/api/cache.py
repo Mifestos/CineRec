@@ -1,8 +1,7 @@
-import os
 import redis.asyncio as redis
+from cinerec.core.config import settings
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 def get_redis_client() -> redis.Redis:
-    """Возвращает асинхронный клиент Redis."""
-    return redis.from_url(REDIS_URL, decode_responses=True)
+    """Возвращает асинхронный клиент Redis на основе глобальной конфигурации."""
+    return redis.from_url(settings.REDIS_URL, decode_responses=True)

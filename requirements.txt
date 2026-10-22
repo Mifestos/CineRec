@@ -1,22 +1,59 @@
+# ==========================================
+# Core ML & Data Processing
+# ==========================================
 pandas==2.2.3
 numpy>=2.0.0,<2.3.0
 scipy==1.14.1
 scikit-learn==1.5.2
 implicit==0.7.3
 lightgbm==4.5.0
+pyarrow>=15.0.0,<18.0.0
+torch==2.4.1
+
+# ==========================================
+# Backend API & Web Server
+# ==========================================
 fastapi==0.115.0
 uvicorn==0.32.0
-redis==5.2.0
 pydantic==2.10.3
-pytest==8.3.4
+pydantic-settings==2.6.1
+python-multipart==0.0.12
+redis==5.2.0
+prometheus-fastapi-instrumentator==7.0.0
+httpx==0.27.2
+email-validator==2.2.0
+
+# ==========================================
+# Database & Migrations
+# ==========================================
+sqlalchemy>=2.0,<2.1
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# ==========================================
+# Security & Authentication
+# ==========================================
+bcrypt==4.1.2
+python-jose[cryptography]==3.3.0
+
+# ==========================================
+# MLOps & Tracking
+# ==========================================
+mlflow==2.17.2
 requests==2.32.3
 tqdm==4.67.1
-pyarrow>=15.0.0,<18.0.0
+
+# ==========================================
+# Testing & Load Testing
+# ==========================================
+pytest==8.3.4
 pytest-mock==3.14.0
 pytest-cov==6.0.0
-httpx==0.27.2
 locust==2.32.3
-torch==2.4.1
-sqlalchemy>=2.0,<2.1
-mlflow==2.17.2
-prometheus-fastapi-instrumentator==7.0.0
+
+# ==========================================
+# Tools
+# ==========================================
+
+typer==0.12.5
+rich==13.9.4

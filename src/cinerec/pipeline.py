@@ -4,9 +4,11 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import logging
 import pickle
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import pandas as pd
+import numpy as np
+import scipy.sparse as sparse
 
 from cinerec.retrieval.base import BaseRetriever
 from cinerec.ranking.base import BaseRanker
@@ -21,31 +23,29 @@ MODEL_DIR = Path("models")
 TOP_GENRES = ["Action", "Comedy", "Drama", "Horror", "Romance"]
 DEFAULT_USER_STATS = {"user_avg_rating": 3.5, "user_num_ratings": 0}
 DEFAULT_MOVIE_STATS = {"movie_avg_rating": 3.5, "movie_num_ratings": 0}
+MIN_RATINGS_FOR_PERSONALIZATION = 5
 
 
 class TwoStageRecommender:
-    """Двухэтапный рекомендательный пайплайн (Retrieval + Ranking)."""
+    """Двухэтапный рекомендательный пайплайн (Retrieval + Ranking) для v2.0."""
 
     def __init__(self, retriever: BaseRetriever = None, ranker: BaseRanker = None) -> None:
         logger.info("Инициализация пайплайна...")
         
-        # Dependency Injection: если модель не передана, берем дефолтную
         self.retriever = retriever if retriever else ALSRetriever()
         
         if ranker is None:
-            logger.info("Загрузка дефолтного ранжировщика (LGBMClassifier)...")
-            with open(MODEL_DIR / "ranker_classifier.pkl", "rb") as f:
-                self.ranker = pickle.load(f)
-        else:
-            self.ranker = ranker
+            logger.info("Загрузка дефолтного ранжировщика (LGBMRanker-LTR)...")
+            with open(MODEL_DIR / "ranker_ltr.pkl", "rb") as f:
+                self.ranker = ranker if ranker else pickle.load(f)
 
         self._load_reference_data()
 
     def _load_reference_data(self) -> None:
-        """Загружает предвычисленные статистики и метаданные для инференса."""
+        """Загружает предвычисленные статистики и метаданные из офлайн-пайплайна."""
         logger.info("Загрузка справочников...")
+        # Эти данные мы предвычисляли ранее и они нужны для фичей ранжировщика
         self.movie_stats = pd.read_parquet(PROCESSED_DIR / "movie_stats.parquet").to_dict(orient="index")
-        self.user_stats = pd.read_parquet(PROCESSED_DIR / "user_stats.parquet").to_dict(orient="index")
         self.popular_movie_ids = pd.read_parquet(PROCESSED_DIR / "popular_movies.parquet").index.tolist()
 
         movies = pd.read_csv(DATA_DIR / "movies.csv")
@@ -55,12 +55,6 @@ class TwoStageRecommender:
             
         self.movie_genres = movies.set_index("movieId")[[f"is_{g}" for g in TOP_GENRES]].to_dict(orient="index")
         self.movie_titles = movies.set_index("movieId")[["title", "genres"]].to_dict(orient="index")
-
-        # Загружаем предвычисленную статистику по жанрам вместо чтения всего CSV
-        self.user_genre_stats = {}
-        for genre in TOP_GENRES:
-            df = pd.read_parquet(PROCESSED_DIR / f"{genre}_stats.parquet")
-            self.user_genre_stats[f"user_avg_{genre}"] = df[f"user_avg_{genre}"].to_dict()
 
     def _get_popular_fallback(self, top_n: int) -> List[Dict[str, Any]]:
         """Возвращает витрину популярных фильмов (Cold Start Fallback)."""
@@ -76,26 +70,61 @@ class TwoStageRecommender:
             })
         return results
 
+    def _calculate_user_features(self, user_ratings: Dict[int, float]) -> Dict[str, float]:
+        """Рассчитывает признаки пользователя на лету на основе его оценок из БД."""
+        if not user_ratings:
+            return {**DEFAULT_USER_STATS, **{f"user_avg_{g}": 3.5 for g in TOP_GENRES}}
+
+        avg_rating = float(np.mean(list(user_ratings.values())))
+        num_ratings = len(user_ratings)
         
-    def recommend(self, user_id: int, top_n: int = 10, retrieval_k: int = 50, filter_already_liked: bool = True) -> List[Dict[str, Any]]:
-        """Генерирует топ-N рекомендаций для пользователя."""
+        features = {
+            "user_avg_rating": avg_rating,
+            "user_num_ratings": num_ratings
+        }
+
+        # Считаем средний рейтинг по каждому жанру для этого пользователя
+        for genre in TOP_GENRES:
+            genre_movies = [
+                mid for mid in user_ratings.keys() 
+                if self.movie_genres.get(mid, {}).get(f"is_{genre}", 0) == 1
+            ]
+            if genre_movies:
+                genre_ratings = [user_ratings[mid] for mid in genre_movies]
+                features[f"user_avg_{genre}"] = float(np.mean(genre_ratings))
+            else:
+                features[f"user_avg_{genre}"] = avg_rating
+
+        return features
+
+    def recommend(
+        self, 
+        user_ratings: Dict[int, float], 
+        top_n: int = 10, 
+        retrieval_k: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Генерирует топ-N рекомендаций на основе оценок пользователя (из БД).
         
-        if not self.retriever.has_user(user_id):
-            logger.info("Cold start: user_id=%s. Returning popular items.", user_id)
+        Args:
+            user_ratings: Словарь {movie_id: score} с оценками пользователя.
+            top_n: Количество рекомендаций.
+            retrieval_k: Количество кандидатов для этапа ранжирования.
+        """
+        # 1. Проверка на холодный старт (если оценок мало)
+        if len(user_ratings) < MIN_RATINGS_FOR_PERSONALIZATION:
+            logger.info("Cold start: user has %d ratings. Returning popular items.", len(user_ratings))
             return self._get_popular_fallback(top_n)
 
-        candidates = self.retriever.recommend(user_id, top_k=retrieval_k, filter_already_liked=filter_already_liked)
+        # 2. RETRIEVAL (Онлайн-обновление)
+        # Нам нужно получить кандидатов на основе оценок пользователя
+        candidates = self.retriever.recommend_for_ratings(user_ratings, top_k=retrieval_k)
         if not candidates:
             return self._get_popular_fallback(top_n)
 
-        u_stats = self.user_stats.get(user_id, DEFAULT_USER_STATS)
+        # 3. RANKING
+        user_feats = self._calculate_user_features(user_ratings)
         features = []
-        
-        u_genre_features = {}
-        for genre in TOP_GENRES:
-            u_genre_features[f"user_avg_{genre}"] = self.user_genre_stats[f"user_avg_{genre}"].get(
-                user_id, u_stats["user_avg_rating"]
-            )
 
         for item in candidates:
             movie_id = item["movieId"]
@@ -104,17 +133,22 @@ class TwoStageRecommender:
             m_stats = self.movie_stats.get(movie_id, DEFAULT_MOVIE_STATS)
             m_genres = self.movie_genres.get(movie_id, {f"is_{g}": 0 for g in TOP_GENRES})
             
-            features.append({
+            # Формируем полный вектор фичей для LightGBM
+            feature_row = {
                 "retrieval_score": retrieval_score,
                 "movie_avg_rating": m_stats["movie_avg_rating"],
                 "movie_num_ratings": m_stats["movie_num_ratings"],
-                "user_avg_rating": u_stats["user_avg_rating"],
-                "user_num_ratings": u_stats["user_num_ratings"],
-                "rating_diff": u_stats["user_avg_rating"] - m_stats["movie_avg_rating"],
+                "user_avg_rating": user_feats["user_avg_rating"],
+                "user_num_ratings": user_feats["user_num_ratings"],
+                "rating_diff": user_feats["user_avg_rating"] - m_stats["movie_avg_rating"],
                 "popularity_score": m_stats["movie_num_ratings"] * m_stats["movie_avg_rating"],
                 **m_genres,
-                **u_genre_features
-            })
+            }
+            # Добавляем фичи по жанрам
+            for genre in TOP_GENRES:
+                feature_row[f"user_avg_{genre}"] = user_feats[f"user_avg_{genre}"]
+                
+            features.append(feature_row)
 
         feature_cols = ["retrieval_score", "movie_avg_rating", "movie_num_ratings", 
                         "user_avg_rating", "user_num_ratings", "rating_diff", "popularity_score"] \
@@ -122,8 +156,10 @@ class TwoStageRecommender:
         
         X_rank = pd.DataFrame(features).reindex(columns=feature_cols, fill_value=0)
         
+        # Инференс модели (в зависимости от того, LTR или Classifier)
         scores = self.ranker.predict(X_rank)
 
+        # 4. Формирование итогового ответа
         results = []
         for item, score in zip(candidates, scores):
             movie_id = item["movieId"]
