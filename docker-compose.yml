@@ -7,17 +7,16 @@ services:
     volumes:
       - ./data:/app/data
       - ./models:/app/models
-      - ./src:/app/src 
+    env_file:
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://cinerec_user:cinerec_password@db:5432/cinerec_db
-      - SECRET_KEY=local_dev_secret_key_change_me_in_production
     depends_on:
       redis:
         condition: service_started
       db:
         condition: service_healthy
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -25,23 +24,25 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --appendonly yes
+    restart: unless-stopped
 
   db:
     image: postgres:16-alpine
     container_name: cinerec_db
     environment:
-      POSTGRES_USER: cinerec_user
-      POSTGRES_PASSWORD: cinerec_password
-      POSTGRES_DB: cinerec_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cinerec_user -d cinerec_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
 volumes:
-  pgdata: 
+  pgdata:

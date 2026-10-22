@@ -1,0 +1,14 @@
+# ==========================================
+# Development Overrides (только для локальной разработки)
+# ==========================================
+services:
+  api:
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./src:/app/src
+    
+    # В dev-режиме заливаем данные автоматически + hot-reload
+    command: >
+      sh -c "python -m cinerec.cli db-seed-movies &&
+             uvicorn cinerec.api.main:app --host 0.0.0.0 --port 8000 --reload"

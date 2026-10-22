@@ -1,4 +1,6 @@
 from typing import List
+
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from cinerec.db.models import User, Rating, Movie, Review
@@ -7,27 +9,27 @@ from cinerec.nlp.sentiment import analyze_sentiment, analyze_aspects
 
 
 # ==========================================
-# Операции с пользователями (Users)
+# Users
 # ==========================================
 def get_user_by_username(db: Session, username: str) -> User | None:
-    """Возвращает пользователя по имени."""
     return db.query(User).filter(User.username == username).first()
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
-    """Возвращает пользователя по email."""
     return db.query(User).filter(User.email == email).first()
 
 
 def get_user_by_id(db: Session, user_id: int) -> User | None:
-    """Возвращает пользователя по ID."""
     return db.query(User).filter(User.id == user_id).first()
 
 
 def create_user(db: Session, username: str, email: str, password: str) -> User:
     """Создает нового пользователя с хешированным паролем."""
-    hashed_password = get_password_hash(password)
-    db_user = User(username=username, email=email, hashed_password=hashed_password)
+    db_user = User(
+        username=username,
+        email=email,
+        hashed_password=get_password_hash(password),
+    )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -35,72 +37,79 @@ def create_user(db: Session, username: str, email: str, password: str) -> User:
 
 
 # ==========================================
-# Операции с фильмами (Movies)
+# Movies
 # ==========================================
 def get_movie_by_id(db: Session, movie_id: int) -> Movie | None:
-    """Возвращает фильм по ID (для валидации при выставлении оценки)."""
     return db.query(Movie).filter(Movie.id == movie_id).first()
 
 
 # ==========================================
-# Операции с оценками (Ratings)
+# Ratings
 # ==========================================
 def get_user_ratings(db: Session, user_id: int) -> dict[int, float]:
-    """Возвращает словарь с оценками пользователя в формате {movie_id: score}."""
-    ratings = db.query(Rating).filter(Rating.user_id == user_id).all()
-    return {rating.movie_id: rating.score for rating in ratings}
+    """Возвращает словарь с оценками пользователя: {movie_id: score}."""
+    rows = db.query(Rating.movie_id, Rating.score).filter(Rating.user_id == user_id).all()
+    return {movie_id: score for movie_id, score in rows}
 
 
-def create_or_update_rating(db: Session, user_id: int, movie_id: int, score: float) -> Rating:
-    """Создает новую оценку или обновляет существующую (Upsert-логика)."""
-    existing_rating = db.query(Rating).filter(
-        Rating.user_id == user_id,
-        Rating.movie_id == movie_id
-    ).first()
-
-    if existing_rating:
-        existing_rating.score = score
-        db.commit()
-        db.refresh(existing_rating)
-        return existing_rating
-
-    new_rating = Rating(user_id=user_id, movie_id=movie_id, score=score)
-    db.add(new_rating)
+def upsert_rating(db: Session, user_id: int, movie_id: int, score: float) -> Rating:
+    """
+    Атомарный upsert через PostgreSQL ON CONFLICT.
+    Гарантирует, что даже при параллельных запросах не будет дубликата.
+    """
+    stmt = (
+        pg_insert(Rating)
+        .values(user_id=user_id, movie_id=movie_id, score=score)
+        .on_conflict_do_update(
+            constraint="uq_user_movie_rating",
+            set_={"score": score},
+        )
+        .returning(Rating)
+    )
+    result = db.execute(stmt)
     db.commit()
-    db.refresh(new_rating)
-    return new_rating
+    return result.scalar_one()
 
 
 # ==========================================
-# Операции с отзывами (Reviews)
+# Reviews
 # ==========================================
-def create_review(db: Session, user_id: int, movie_id: int, text: str) -> Review:
+def upsert_review(db: Session, user_id: int, movie_id: int, text: str) -> Review:
     """
-    Создает отзыв, прогоняет текст через NLP-модели 
-    и сохраняет результаты анализа в БД.
+    Создает или обновляет отзыв. При обновлении повторно запускает NLP-анализ
+    (тональность и аспекты могут измениться, если пользователь отредактировал текст).
     """
-    # 1. Вызываем NLP-модуль
     sentiment, score = analyze_sentiment(text)
     aspects = analyze_aspects(text)
-    
-    # 2. Создаем запись в БД
-    db_review = Review(
-        user_id=user_id,
-        movie_id=movie_id,
-        text=text,
-        sentiment=sentiment,
-        sentiment_score=score,
-        aspects=aspects
+
+    stmt = (
+        pg_insert(Review)
+        .values(
+            user_id=user_id,
+            movie_id=movie_id,
+            text=text,
+            sentiment=sentiment,
+            sentiment_score=score,
+            aspects=aspects,
+        )
+        .on_conflict_do_update(
+            constraint="uq_user_movie_review",
+            set_={
+                "text": text,
+                "sentiment": sentiment,
+                "sentiment_score": score,
+                "aspects": aspects,
+            },
+        )
+        .returning(Review)
     )
-    
-    db.add(db_review)
+    result = db.execute(stmt)
     db.commit()
-    db.refresh(db_review)
-    return db_review
+    return result.scalar_one()
 
 
 def get_reviews_by_movie(db: Session, movie_id: int, skip: int = 0, limit: int = 50) -> List[Review]:
-    """Возвращает список отзывов для фильма с пагинацией."""
+    """Возвращает список отзывов для фильма (от новых к старым) с пагинацией."""
     return (
         db.query(Review)
         .filter(Review.movie_id == movie_id)

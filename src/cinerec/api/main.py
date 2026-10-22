@@ -2,12 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from cinerec.api.cache import get_redis_client
 from cinerec.api.auth import router as auth_router
 from cinerec.api.ratings import router as ratings_router
-from cinerec.api.reviews import router as reviews_router  
+from cinerec.api.reviews import router as reviews_router
 from cinerec.api.routes import router as recommend_router
 from cinerec.pipeline import TwoStageRecommender
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Управление жизненным циклом приложения (загрузка ML-моделей и Redis)."""
+    """Управление жизненным циклом приложения."""
     logger.info("Starting up: loading ML models and Redis connection...")
     
     app.state.recommender = TwoStageRecommender()
@@ -41,10 +42,26 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Подключаем роутеры
+# ==========================================
+# CORS Middleware (для фронтенда)
+# ==========================================
+app.add_middleware(
+    CORSMiddleware,
+    # В production здесь должен быть список конкретных доменов (например, ["https://cinerec.com"])
+    # Символ "*" разрешает запросы с любого источника (удобно для dev)
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ==========================================
+# Роутеры
+# ==========================================
 app.include_router(auth_router)
 app.include_router(ratings_router)
-app.include_router(reviews_router)  
+app.include_router(reviews_router)
 app.include_router(recommend_router, prefix="/api/v1", tags=["Recommendations"])
 
+# Prometheus
 Instrumentator().instrument(app).expose(app)

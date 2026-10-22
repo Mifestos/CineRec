@@ -1,1 +1,19 @@
+# ==========================================
+# Line Endings (LF для Linux/Docker совместимости)
+# ==========================================
+* text=auto eol=lf
+
+# Shell-скрипты 
 *.sh text eol=lf
+
+# Windows-скрипты 
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Бинарные файлы 
+*.pkl binary
+*.npz binary
+*.parquet binary
+*.png binary
+*.jpg binary
+*.zip binary

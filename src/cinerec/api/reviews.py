@@ -20,12 +20,12 @@ def create_review(
     db: Session = Depends(get_db)
 ):
     """
-    Создает новый отзыв от имени текущего пользователя.
+    Создает или обновляет отзыв от имени текущего пользователя.
     Автоматически запускает NLP-анализ тональности и извлечение аспектов.
     """
-    logger.info("User %s is creating a review for movie %s", current_user.username, review_in.movie_id)
+    logger.info("User %s is submitting a review for movie %s", current_user.username, review_in.movie_id)
     
-    # Проверяем, существует ли фильм в базе (защита от мусорных отзывов)
+    # Проверяем, существует ли фильм в базе
     movie = crud.get_movie_by_id(db, movie_id=review_in.movie_id)
     if not movie:
         raise HTTPException(
@@ -33,8 +33,8 @@ def create_review(
             detail=f"Movie with id {review_in.movie_id} not found"
         )
 
-    # Создаем отзыв (NLP-анализ происходит внутри crud.create_review)
-    review = crud.create_review(
+    # Создаем или обновляем отзыв (NLP-анализ происходит внутри crud.upsert_review)
+    review = crud.upsert_review(
         db, 
         user_id=current_user.id, 
         movie_id=review_in.movie_id, 
@@ -42,7 +42,7 @@ def create_review(
     )
     
     logger.info(
-        "Review created successfully. Sentiment: %s, Aspects found: %s", 
+        "Review processed successfully. Sentiment: %s, Aspects found: %s", 
         review.sentiment, 
         list(review.aspects.keys()) if review.aspects else []
     )
@@ -59,7 +59,7 @@ def get_movie_reviews(
 ):
     """
     Возвращает список отзывов для конкретного фильма.
-    Доступно без авторизации (чтобы все пользователи могли читать отзывы).
+    Доступно без авторизации.
     """
     movie = crud.get_movie_by_id(db, movie_id=movie_id)
     if not movie:

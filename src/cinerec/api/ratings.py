@@ -21,19 +21,19 @@ def rate_movie(
     """
     Выставляет или обновляет оценку фильма от имени текущего пользователя.
     """
-    logger.info(f"User {current_user.username} rating movie {rating_in.movie_id} with score {rating_in.score}")
+    logger.info("User %s rating movie %s with score %s", current_user.username, rating_in.movie_id, rating_in.score)
     
     # Проверяем, существует ли фильм (защита от Foreign Key Error)
     movie = crud.get_movie_by_id(db, movie_id=rating_in.movie_id)
     if not movie:
-        logger.warning(f"Movie {rating_in.movie_id} not found.")
+        logger.warning("Movie %s not found.", rating_in.movie_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail=f"Movie with id {rating_in.movie_id} not found"
         )
 
-    # Сохраняем оценку в БД
-    rating = crud.create_or_update_rating(
+    # Сохраняем оценку в БД (атомарный upsert)
+    rating = crud.upsert_rating(
         db, 
         user_id=current_user.id, 
         movie_id=rating_in.movie_id, 

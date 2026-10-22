@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import ForeignKey, String, Float, Integer, DateTime, Text, JSON
+from sqlalchemy import (
+    ForeignKey, String, Float, Integer, DateTime, Text, 
+    UniqueConstraint, Index
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -17,7 +21,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Используем timezone-aware datetime
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     ratings: Mapped[List["Rating"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -53,10 +58,15 @@ class Rating(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id", ondelete="CASCADE"))
     score: Mapped[float] = mapped_column(Float)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship(back_populates="ratings")
     movie: Mapped["Movie"] = relationship(back_populates="ratings")
+
+    # Защита на уровне БД: один пользователь может поставить только одну оценку фильму
+    __table_args__ = (
+        UniqueConstraint("user_id", "movie_id", name="uq_user_movie_rating"),
+    )
 
 
 class Review(Base):
@@ -70,9 +80,17 @@ class Review(Base):
     # Результаты NLP-анализа
     sentiment: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     sentiment_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    aspects: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # JSONB быстрее и поддерживает GIN-индексы
+    aspects: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship(back_populates="reviews")
     movie: Mapped["Movie"] = relationship(back_populates="reviews")
+
+    # GIN-индекс для быстрого поиска по содержимому JSONB (например, WHERE aspects->>'plot' = 'positive')
+    __table_args__ = (
+        UniqueConstraint("user_id", "movie_id", name="uq_user_movie_review"),
+        Index("ix_reviews_aspects_gin", "aspects", postgresql_using="gin"),
+    )
