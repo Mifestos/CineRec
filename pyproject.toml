@@ -4,9 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cinerec"
-version = "0.1.0"
-description = "Двухэтапная рекомендательная система (поиск кандидатов и ранжирование) для MovieLens"
+version = "2.0.0"
+description = "Двухэтапная рекомендательная система (Retrieval + Ranking) с UGC и NLP-анализом отзывов"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.12"
+authors = [
+    { name = "Mifestos" },
+]
+keywords = ["recommender-system", "machine-learning", "fastapi", "nlp", "recsys"]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -14,9 +25,22 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: marks tests as slow integration tests (deselect with '-m \"not integration\"')"
+    "integration: медленные тесты с реальной инфраструктурой (Postgres, Redis, модели)",
+    "evaluation: A/B-тесты качества ML-моделей (требуют обученных весов)",
+    "load: нагрузочные тесты через Locust",
 ]
 addopts = "-v --cov=src/cinerec --cov-report=term-missing"
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
-    "ignore::DeprecationWarning:starlette.*", 
+    "ignore::DeprecationWarning:jose.*",
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::UserWarning:huggingface_hub.*",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]  # FastAPI Depends() в аргументах — это не ошибка

@@ -8,7 +8,6 @@ from typing import List, Dict, Any, Optional
 
 import pandas as pd
 import numpy as np
-import scipy.sparse as sparse
 
 from cinerec.retrieval.base import BaseRetriever
 from cinerec.ranking.base import BaseRanker
@@ -29,22 +28,30 @@ MIN_RATINGS_FOR_PERSONALIZATION = 5
 class TwoStageRecommender:
     """Двухэтапный рекомендательный пайплайн (Retrieval + Ranking) для v2.0."""
 
-    def __init__(self, retriever: BaseRetriever = None, ranker: BaseRanker = None) -> None:
+    def __init__(
+        self, 
+        retriever: Optional[BaseRetriever] = None, 
+        ranker: Optional[BaseRanker] = None
+    ) -> None:
         logger.info("Инициализация пайплайна...")
         
-        self.retriever = retriever if retriever else ALSRetriever()
+        # Dependency Injection для Retriever
+        self.retriever = retriever if retriever is not None else ALSRetriever()
         
-        if ranker is None:
+        # ИСПРАВЛЕНИЕ: Правильная логика для Ranker
+        if ranker is not None:
+            logger.info("Использование переданного ранжировщика: %s", type(ranker).__name__)
+            self.ranker = ranker
+        else:
             logger.info("Загрузка дефолтного ранжировщика (LGBMRanker-LTR)...")
             with open(MODEL_DIR / "ranker_ltr.pkl", "rb") as f:
-                self.ranker = ranker if ranker else pickle.load(f)
+                self.ranker = pickle.load(f)
 
         self._load_reference_data()
 
     def _load_reference_data(self) -> None:
         """Загружает предвычисленные статистики и метаданные из офлайн-пайплайна."""
         logger.info("Загрузка справочников...")
-        # Эти данные мы предвычисляли ранее и они нужны для фичей ранжировщика
         self.movie_stats = pd.read_parquet(PROCESSED_DIR / "movie_stats.parquet").to_dict(orient="index")
         self.popular_movie_ids = pd.read_parquet(PROCESSED_DIR / "popular_movies.parquet").index.tolist()
 
@@ -83,7 +90,6 @@ class TwoStageRecommender:
             "user_num_ratings": num_ratings
         }
 
-        # Считаем средний рейтинг по каждому жанру для этого пользователя
         for genre in TOP_GENRES:
             genre_movies = [
                 mid for mid in user_ratings.keys() 
@@ -105,24 +111,15 @@ class TwoStageRecommender:
     ) -> List[Dict[str, Any]]:
         """
         Генерирует топ-N рекомендаций на основе оценок пользователя (из БД).
-        
-        Args:
-            user_ratings: Словарь {movie_id: score} с оценками пользователя.
-            top_n: Количество рекомендаций.
-            retrieval_k: Количество кандидатов для этапа ранжирования.
         """
-        # 1. Проверка на холодный старт (если оценок мало)
         if len(user_ratings) < MIN_RATINGS_FOR_PERSONALIZATION:
             logger.info("Cold start: user has %d ratings. Returning popular items.", len(user_ratings))
             return self._get_popular_fallback(top_n)
 
-        # 2. RETRIEVAL (Онлайн-обновление)
-        # Нам нужно получить кандидатов на основе оценок пользователя
         candidates = self.retriever.recommend_for_ratings(user_ratings, top_k=retrieval_k)
         if not candidates:
             return self._get_popular_fallback(top_n)
 
-        # 3. RANKING
         user_feats = self._calculate_user_features(user_ratings)
         features = []
 
@@ -133,7 +130,6 @@ class TwoStageRecommender:
             m_stats = self.movie_stats.get(movie_id, DEFAULT_MOVIE_STATS)
             m_genres = self.movie_genres.get(movie_id, {f"is_{g}": 0 for g in TOP_GENRES})
             
-            # Формируем полный вектор фичей для LightGBM
             feature_row = {
                 "retrieval_score": retrieval_score,
                 "movie_avg_rating": m_stats["movie_avg_rating"],
@@ -144,7 +140,6 @@ class TwoStageRecommender:
                 "popularity_score": m_stats["movie_num_ratings"] * m_stats["movie_avg_rating"],
                 **m_genres,
             }
-            # Добавляем фичи по жанрам
             for genre in TOP_GENRES:
                 feature_row[f"user_avg_{genre}"] = user_feats[f"user_avg_{genre}"]
                 
@@ -156,10 +151,9 @@ class TwoStageRecommender:
         
         X_rank = pd.DataFrame(features).reindex(columns=feature_cols, fill_value=0)
         
-        # Инференс модели (в зависимости от того, LTR или Classifier)
+        # Теперь self.ranker гарантированно существует
         scores = self.ranker.predict(X_rank)
 
-        # 4. Формирование итогового ответа
         results = []
         for item, score in zip(candidates, scores):
             movie_id = item["movieId"]
