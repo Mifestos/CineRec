@@ -49,7 +49,7 @@ app.add_middleware(
     CORSMiddleware,
     # В production здесь должен быть список конкретных доменов (например, ["https://cinerec.com"])
     # Символ "*" разрешает запросы с любого источника (удобно для dev)
-    allow_origins=["*"], 
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

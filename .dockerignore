@@ -10,3 +10,4 @@ notebooks/
 *.parquet
 *.pkl
 *.npz
+cookies.txt

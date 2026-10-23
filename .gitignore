@@ -15,3 +15,4 @@ src/cinerec.egg-info/
 .coverage.*
 mlflow.db
 mlruns/
+cookies.txt
