@@ -58,9 +58,9 @@ app.add_middleware(
 # ==========================================
 # Роутеры
 # ==========================================
-app.include_router(auth_router)
-app.include_router(ratings_router)
-app.include_router(reviews_router)
+app.include_router(auth_router, prefix="/api")
+app.include_router(ratings_router, prefix="/api")
+app.include_router(reviews_router, prefix="/api")
 app.include_router(recommend_router, prefix="/api/v1", tags=["Recommendations"])
 
 # Prometheus
