@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from cinerec.api import schemas
 from cinerec.api.dependencies import get_current_user
-from cinerec.db import crud
-from cinerec.db.session import get_db
-from cinerec.db.models import User
 from cinerec.core import security
+from cinerec.db import crud
+from cinerec.db.models import User
+from cinerec.db.session import get_db
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
