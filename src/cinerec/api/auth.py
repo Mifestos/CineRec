@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from cinerec.api import schemas
-from cinerec.core import security
+from cinerec.api.dependencies import get_current_user
 from cinerec.db import crud
 from cinerec.db.session import get_db
+from cinerec.db.models import User
+from cinerec.core import security
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -25,8 +27,12 @@ def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """Авторизация и выдача JWT-токена."""
+def login(
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Авторизация, выдача JWT-токена и установка httpOnly cookie."""
     user = crud.get_user_by_username(db, username=form_data.username)
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -36,4 +42,22 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
 
     access_token = security.create_access_token(subject=user.id)
+    
+    # Устанавливаем токен в HttpOnly Cookie для безопасности
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        max_age=1800,
+        expires=1800,
+        samesite="lax",
+        secure=False, 
+    )
+    
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/me", response_model=schemas.UserResponse)
+def read_users_me(current_user: User = Depends(get_current_user)):
+    """Возвращает данные текущего авторизованного пользователя (используется фронтендом)."""
+    return current_user
