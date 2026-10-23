@@ -83,3 +83,14 @@ class MovieRecommendation(BaseModel):
     title: str = Field(..., description="Название фильма")
     genres: str = Field(..., description="Жанры фильма")
     score: float = Field(..., description="Оценка релевантности от ML-модели")
+
+# ==========================================
+# Карточка фильма
+# ==========================================
+class MovieResponse(BaseModel):
+    id: int
+    title: str
+    genres: str
+    release_year: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
