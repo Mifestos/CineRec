@@ -1,170 +1,152 @@
 # CineRec
 
-![Tests](https://github.com/Mifestos/CineRec/actions/workflows/python-tests.yml/badge.svg?branch=main)
+[![Fast Tests](https://github.com/Mifestos/CineRec/actions/workflows/fast-tests.yml/badge.svg?branch=main)](https://github.com/Mifestos/CineRec/actions/workflows/fast-tests.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Production-ready рекомендательная система для стримингового сервиса, построенная на базе датасета MovieLens 25M. Реализует классическую двухэтапную архитектуру, используемую в индустрии (Netflix, Spotify, Яндекс): Retrieval (генерация кандидатов) и Ranking (персонализированное ранжирование).
+Рекомендательная система с поддержкой пользовательского контента (UGC), двухэтапным пайплайном retrieval и ranking, а также Aspect-Based Sentiment Analysis (ABSA) для обработки отзывов.
 
-## Бизнес-ценность и архитектура
+## Архитектура
 
-В высоконагруженных системах невозможно прогнать всю базу контента (62 000 фильмов) через тяжелую ML-модель за 50 миллисекунд. Проект решает эту проблему с помощью двух этапов:
+Система решает проблему задержки при скоринге полного каталога (62 тыс. элементов) на каждый запрос путём разделения пайплайна на два этапа:
 
-1. **Retrieval (Stage 1):** Модель матричной факторизации (ALS) быстро отбирает 50 наиболее релевантных кандидатов из 62 000 фильмов на основе скрытых факторов.
-2. **Ranking (Stage 2):** Градиентный бустинг (LightGBM) применяет десятки признаков (популярность фильма, средний рейтинг, жанры, ALS-скор) к 50 кандидатам, вычисляя вероятность того, что пользователю понравится фильм.
+1. **Retrieval (этап 1).** Матричная факторизация (Implicit ALS) отбирает 50 кандидатов из полного каталога на основе латентных факторов. Сложность — O(log N) за счёт разреженных матричных операций.
+2. **Ranking (этап 2).** LightGBM с objective LambdaRank скорит 50 кандидатов по 17 признакам (популярность, средний рейтинг, взаимодействия по жанрам, ALS-скор) и переупорядочивает их по предсказанной релевантности.
 
-**Дополнительные возможности:**
-* **Кэширование:** Redis используется для кэширования ответов API, что снижает нагрузку на ML-модели при повторных запросах.
-* **Cold Start Fallback:** Если пользователь отсутствует в обучающей выборке, система возвращает витрину популярных фильмов (Top-50 по среднему рейтингу), предотвращая ошибки 404.
+### Дополнительные компоненты
 
-**Стек технологий:**
-* **ML:** Python 3.12, Implicit (ALS), LightGBM, Pandas, Scikit-learn
-* **Backend:** FastAPI, Uvicorn, Pydantic, Redis
-* **DevOps:** Docker, Docker Compose
-* **Тестирование:** Pytest, Pytest-mock, Pytest-cov
+- **NLP-слой.** Русскоязычная модель RuBERT выполняет аспектный анализ тональности отзывов. Пайплайн извлекает тональность по конкретным аспектам (сюжет, актёры, музыка), а не единый скор по документу.
+- **Cold start fallback.** Пользователи с менее чем 5 оценками получают ранжирование по популярности (топ-50 по взвешенному рейтингу) вместо 404.
+- **Кэширование.** Redis кэширует ответы API с TTL 300 секунд. Ключи кэша привязаны к пользователю и параметру `top_n`.
+- **Аутентификация.** JWT-аутентификация с OAuth2 password flow. Пароли хэшируются bcrypt. Защищённые эндпоинты используют dependency injection FastAPI.
 
-## Результаты (Metrics)
+## Стек
 
-* **Датасет:** MovieLens 25M (25 млн оценок, 162 000 пользователей, 62 000 фильмов)
-* **Качество ранжировщика:** ROC-AUC **0.8038**
-* **Время ответа API (Inference):** < 50 мс на запрос (без учета cold start)
-* **Покрытие тестами (API):** > 85%
-* **Потребление памяти:** ~2.5 GB (загрузка весов моделей и справочников)
+| Слой | Технологии |
+|---|---|
+| ML / Data | Python 3.12, Pandas, Implicit (ALS), LightGBM (LTR), Scikit-learn, PyArrow |
+| NLP | HuggingFace Transformers, RuBERT |
+| Backend | FastAPI, Uvicorn, Pydantic v2, python-jose, bcrypt |
+| Хранилище | PostgreSQL 16, SQLAlchemy 2.0, Alembic, Redis 7 |
+| DevOps | Docker, Docker Compose, GitHub Actions, GHCR |
+| Тестирование | Pytest, pytest-mock, pytest-cov, Locust |
 
-## A/B Тестирование (Offline)
+## Метрики
 
-Для проверки эффективности Learning-to-Rank алгоритма был проведен офлайн A/B тест на 500 случайных пользователях (метрика NDCG@10).
+| Метрика | Значение |
+|---|---|
+| Датасет | MovieLens 25M (25 млн оценок, 162 тыс. пользователей, 62 тыс. элементов) |
+| Качество ранжировщика (ROC-AUC) | 0.8038 |
+| A/B тест NDCG@10 (baseline, LGBMClassifier) | 0.8245 |
+| A/B тест NDCG@10 (challenger, LGBMRanker) | 0.8491 |
+| Относительный прирост | +2.98% |
+| Покрытие тестами (бизнес-логика) | >85% |
+| p99 latency (`/recommend`, cached) | <50 мс |
+| RPS при 100 конкурентных пользователях | ~45 (узкое место: синхронный NLP-инференс) |
 
-* **Group A (Baseline):** LGBMClassifier (Бинарная классификация) — NDCG@10: **0.8245**
-* **Group B (Challenger):** LGBMRanker (Learning-to-Rank, Lambdarank) — NDCG@10: **0.8491**
-* **Прирост качества (Lift):** **+2.98%**
+### Известное узкое место
 
-## MLOps: Отслеживание экспериментов (MLflow)
+Эндпоинт `/reviews` синхронно вызывает RuBERT, что блокирует event loop FastAPI во время инференса. Это снижает пропускную способность с ~310 RPS (базовая версия без NLP) до ~45 RPS. Решение в следующей итерации — вынос NLP в воркер Celery с брокером Redis для восстановления неблокирующей обработки запросов.
 
-Для управления жизненным циклом моделей используется MLflow. Все запуски обучения (гиперпараметры, метрики NDCG и артефакты моделей) логируются в локальную базу данных `mlflow.db`.
+## Структура проекта
 
-Запуск дашборда:
-```bash
-mlflow ui --backend-store-uri sqlite:///mlflow.db
+Репозиторий использует `src`-layout с разделением слоёв по ответственности.
+
+```text
+src/cinerec/
+├── api/          Роутеры FastAPI, схемы Pydantic, зависимости аутентификации
+├── core/         Конфигурация (Pydantic Settings), утилиты JWT/security
+├── db/           ORM-модели SQLAlchemy, CRUD, управление сессиями
+├── nlp/          Обёртка над инференсом RuBERT, логика ABSA
+├── ranking/      Feature engineering, обучение LightGBM
+├── retrieval/    Обучение ALS, онлайн-генерация кандидатов
+└── pipeline.py   Оркестратор TwoStageRecommender
+
+tests/
+├── unit/         Изолированные тесты бизнес-логики (моки зависимостей)
+├── api/          Тесты HTTP-эндпоинтов через TestClient
+├── integration/  Тесты реального пайплайна (требуют обученных моделей)
+├── evaluation/   Офлайн A/B тесты (метрика NDCG)
+└── load/         Сценарии нагрузочного тестирования Locust
 ```
-После этого интерфейс доступен по адресу http://127.0.0.1:5000.
+## Запуск
+Требуется Docker Desktop.
 
-## Быстрый старт (Docker)
+### Клонирование и конфигурация окружения:
 
-Для запуска проекта требуется установленный Docker Desktop.
-
-Клонируйте репозиторий:
 ```bash
 git clone https://github.com/Mifestos/CineRec.git
 cd CineRec
+cp .env.example .env
+# Установите SECRET_KEY (сгенерировать: openssl rand -hex 32)
 ```
-Подготовьте данные (скачайте MovieLens 25M) и распакуйте ratings.csv, movies.csv в папку data/raw/.
+Скачайте MovieLens 25M и распакуйте ratings.csv и movies.csv в data/raw/.
 
-Обучите модели (опционально, если нет готовых весов):
-
-```bash
-pip install -r requirements.txt
-python src/cinerec/retrieval/train_als.py
-python src/cinerec/ranking/features.py
-python src/cinerec/ranking/train_ranker.py
-```
-Запустите сервис:
+### Запуск сервисов:
 
 ```bash
 docker compose up -d --build
 ```
-```text
-API будет доступно по адресу http://localhost:8000. 
-Документация Swagger: http://localhost:8000/docs.
-```
-
-Пример запроса:
+Применение миграций и загрузка данных:
 
 ```bash
-curl "http://localhost:8000/api/v1/recommend/1?top_n=5"
+docker compose exec api python -m cinerec.cli db-init
+docker compose exec api python -m cinerec.cli db-seed-movies
 ```
-Пример ответа:
-```json
-[
-  {
-    "movieId": 3089,
-    "title": "Bicycle Thieves (a.k.a. The Bicycle Thief) (a.k.a. The Bicycle Thieves) (Ladri di biciclette) (1948)",
-    "genres": "Drama",
-    "score": 0.8550311239048133
-  },
-  {
-    "movieId": 1232,
-    "title": "Stalker (1979)",
-    "genres": "Drama|Mystery|Sci-Fi",
-    "score": 0.8548460316116894
-  }
-]
-```
+API доступно по адресу http://localhost:8000. Документация OpenAPI — http://localhost:8000/docs.
+
 ## Тестирование
-Проект покрыт тестами с использованием pytest. Для быстрой проверки логики API (без загрузки тяжелых ML-моделей) используются моки (unittest.mock).
-
-Unit-тесты: Проверка успешных ответов, валидации параметров, обработки кэша и cold start fallback.
-
-Integration-тесты: Проверка реального пайплайна ALS + LightGBM на соответствие формату.
-
-Запуск быстрых тестов (без загрузки моделей):
+### Доступные команды (через make):
 
 ```bash
-pytest -m "not integration"
+make test-fast    # Unit + API тесты (моки, ~3 сек)
+make test-eval    # A/B оценка (требует обученных моделей)
+make lint         # Статический анализ Ruff
 ```
-### CI/CD (Continuous Integration)
+### CI-пайплайн
+GitHub Actions запускает три workflow:
 
-Проект настроен на автоматический запуск тестов при каждом пуше в ветки `main` и `develop`. 
-Конфигурация находится в файле `.github/workflows/python-tests.yml`.
+Fast Tests (на каждый push и PR). Запускает линтинг ruff, затем 22 unit/API теста с порогом покрытия 60%. Пайплайн падает, если не прошёл линтинг или не достигнут порог покрытия.
 
-При создании Pull Request или пуше GitHub Actions:
-1. Поднимает чистую виртуальную машину (Ubuntu).
-2. Устанавливает зависимости из `requirements.txt`.
-3. Запускает Unit-тесты (`pytest -m "not integration"`).
-4. Выводит отчет о покрытии (Coverage).
+Scheduled ML Tests (ночной cron). Скачивает датасет MovieLens, обучает ALS и LightGBM с нуля, затем запускает integration и evaluation тесты. Этот workflow не триггерится пушами, чтобы сохранить быструю обратную связь.
 
-**Статус сборки:** [GitHub Actions](https://github.com/Mifestos/CineRec/actions)
+Docker Publish (при push в main). Собирает и публикует образ в GitHub Container Registry с тегами latest, sha-<commit> и semver-тегами при наличии.
 
-## Нагрузочное тестирование (Load Testing)
+### Нагрузочное тестирование
+Сценарий Locust имитирует 100 конкурентных пользователей с реалистичным распределением запросов:
 
-Для проверки стабильности API под высокой нагрузкой используется **Locust**. Тестирование имитирует поведение сотен пользователей, одновременно запрашивающих рекомендации.
+70% — запросы /recommend
 
-**Запуск теста (при работающем Docker с API):**
+20% — отправка оценок
 
-1. Убедитесь, что контейнеры запущены: `docker compose up -d`
-2. Запустите Locust в терминале:
+10% — отправка отзывов (триггерит NLP-инференс)
+
+### Результаты:
+
+Метрика	Значение
+Ошибки	0%
+RPS	~45
+p50 latency	~2000 мс
+p95 latency	~6000 мс
+Анализ причин роста latency после интеграции NLP см. в разделе «Известное узкое место».
+
+### Трекинг экспериментов
+Запуски обучения логируют гиперпараметры, метрики и артефакты в MLflow. Для просмотра экспериментов:
+
 ```bash
-locust -f locustfile.py --host=http://localhost:8000
+mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
-Откройте веб-интерфейс Locust для управления тестом и просмотра графиков в реальном времени: http://localhost:8089
+Интерфейс доступен по адресу http://127.0.0.1:5000.
 
-В интерфейсе укажите количество виртуальных пользователей (например, 100) и скорость их появления (Ramp-up), после чего нажмите «Start swarming».
-
-Результаты тестирования (100 пользователей):
+## Roadmap
 ```text
-Пропускная способность (RPS): ~310 запросов в секунду (пиковая), ~174 RPS (стабильная).
-Время ответа (p50): 8 мс.
-Время ответа (p99): 45 мс.
-Ошибки: 0%.
-```
-## Структура проекта
-Проект использует src-layout для изоляции кода от данных и конфигураций.
-
-```text
-├── data/                  # Сырые данные и Parquet-файлы с признаками
-├── models/                # Веса обученных моделей (ALS, LightGBM)
-├── src/cinerec/
-│   ├── api/               # FastAPI приложение (main, routes, schemas, cache)
-│   ├── ranking/           # Feature Engineering и обучение LightGBM
-│   ├── retrieval/         # Обучение и инференс ALS
-│   └── pipeline.py        # Класс TwoStageRecommender (объединяет оба этапа)
-├── tests/                 # Unit и Integration тесты (Pytest)
-├── Dockerfile             # Инструкция сборки образа
-├── docker-compose.yml     # Оркестрация контейнеров (API + Redis)
-└── requirements.txt       # Зависимости (с фиксированными версиями)
-```
-## Планы по развитию (Roadmap)
-```text
-□ Переход от классического ALS к Two-Tower Neural Network (PyTorch) для улучшения качества Retrieval.
+☑ Переход с офлайн-батчинга на UGC-модель (PostgreSQL)
+☑ Добавление JWT-аутентификации
+☑ Интеграция NLP-пайплайна на базе ABSA
+□ Замена ALS на Two-Tower нейросеть (PyTorch) для retrieval
+□ Вынос NLP-инференса в воркер Celery для восстановления пропускной способности
 ```
 ## Автор
-Mifestos
+Mifestos — Data Scientist / ML Engineer
 
+GitHub: @Mifestos

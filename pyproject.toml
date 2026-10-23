@@ -7,7 +7,8 @@ name = "cinerec"
 version = "2.0.0"
 description = "Двухэтапная рекомендательная система (Retrieval + Ranking) с UGC и NLP-анализом отзывов"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [
     { name = "Mifestos" },
