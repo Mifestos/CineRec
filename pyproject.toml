@@ -44,3 +44,25 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["B008"]  
+
+[tool.coverage.run]
+source = ["src/cinerec"]
+omit = [
+    # CLI — тестируется в integration-тестах
+    "src/cinerec/cli.py",
+    # ML-обучение — тестируется в scheduled-tests.yml
+    "src/cinerec/ranking/*",
+    "src/cinerec/retrieval/train_als.py",
+    # Pipeline — тестируется в integration-тестах (требует веса моделей)
+    "src/cinerec/pipeline.py",
+    "src/cinerec/retrieval/als_retriever.py",
+    # NLP — тестируется отдельно (требует RuBERT)
+    "src/cinerec/nlp/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
