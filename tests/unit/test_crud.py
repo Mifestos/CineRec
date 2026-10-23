@@ -1,8 +1,7 @@
 from unittest.mock import patch
-import pytest
 
 from cinerec.db import crud
-from cinerec.db.models import User, Rating, Review
+from cinerec.db.models import Rating
 
 
 def test_create_user(db_session):

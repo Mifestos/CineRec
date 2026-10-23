@@ -1,12 +1,12 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from cinerec.db.session import get_db
-from cinerec.db.models import User
-from cinerec.db import crud
 from cinerec.core.config import settings
+from cinerec.db import crud
+from cinerec.db.models import User
+from cinerec.db.session import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -27,8 +27,8 @@ def get_current_user(
         if user_id_str is None:
             raise credentials_exception
         user_id = int(user_id_str)
-    except (JWTError, ValueError):
-        raise credentials_exception
+    except (JWTError, ValueError) as e:
+        raise credentials_exception from e
 
     user = crud.get_user_by_id(db, user_id=user_id)
     if user is None:

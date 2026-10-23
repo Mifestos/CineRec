@@ -1,11 +1,10 @@
-from typing import List
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from cinerec.db.models import User, Rating, Movie, Review
 from cinerec.core.security import get_password_hash
-from cinerec.nlp.sentiment import analyze_sentiment, analyze_aspects
+from cinerec.db.models import Movie, Rating, Review, User
+from cinerec.nlp.sentiment import analyze_aspects, analyze_sentiment
 
 
 # ==========================================
@@ -108,7 +107,7 @@ def upsert_review(db: Session, user_id: int, movie_id: int, text: str) -> Review
     return result.scalar_one()
 
 
-def get_reviews_by_movie(db: Session, movie_id: int, skip: int = 0, limit: int = 50) -> List[Review]:
+def get_reviews_by_movie(db: Session, movie_id: int, skip: int = 0, limit: int = 50) -> list[Review]:
     """Возвращает список отзывов для фильма (от новых к старым) с пагинацией."""
     return (
         db.query(Review)

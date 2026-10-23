@@ -1,10 +1,11 @@
 import os
+
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
-import pickle
 import logging
+import pickle
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 import scipy.sparse as sparse
 from implicit.als import AlternatingLeastSquares
@@ -34,7 +35,7 @@ class ALSRetriever(BaseRetriever):
         """Проверяет наличие пользователя в обученной матрице."""
         return user_id in self.user_to_idx
 
-    def recommend(self, user_id: int, top_k: int, filter_already_liked: bool = True) -> List[Dict[str, Any]]:
+    def recommend(self, user_id: int, top_k: int, filter_already_liked: bool = True) -> list[dict[str, Any]]:
         """Офлайн-рекомендации для пользователей из обучающей выборки."""
         if not self.has_user(user_id):
             return []
@@ -49,10 +50,10 @@ class ALSRetriever(BaseRetriever):
 
         return [
             {"movieId": int(self.idx_to_movie[idx]), "score": float(score)}
-            for idx, score in zip(item_ids, scores)
+            for idx, score in zip(item_ids, scores, strict=False)
         ]
 
-    def recommend_for_ratings(self, user_ratings: Dict[int, float], top_k: int) -> List[Dict[str, Any]]:
+    def recommend_for_ratings(self, user_ratings: dict[int, float], top_k: int) -> list[dict[str, Any]]:
         """
         Онлайн-рекомендации на основе оценок пользователя из БД.
         Позволяет генерировать кандидатов для новых пользователей (холодный старт).
@@ -87,5 +88,5 @@ class ALSRetriever(BaseRetriever):
 
         return [
             {"movieId": int(self.idx_to_movie[idx]), "score": float(score)}
-            for idx, score in zip(item_ids, als_scores)
+            for idx, score in zip(item_ids, als_scores, strict=False)
         ]

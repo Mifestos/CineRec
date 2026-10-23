@@ -1,13 +1,14 @@
 import os
+
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import logging
 from pathlib import Path
 
-import pandas as pd
 import lightgbm as lgb
 import mlflow
 import mlflow.lightgbm
+import pandas as pd
 
 from cinerec.ranking.classifier_ranker import LGBMClassifierRanker
 from cinerec.ranking.ltr_ranker import LGBMRankerRanker

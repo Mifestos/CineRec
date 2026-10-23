@@ -1,13 +1,13 @@
 import logging
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from cinerec.api import schemas
 from cinerec.api.dependencies import get_current_user
-from cinerec.db.session import get_db
 from cinerec.db import crud
 from cinerec.db.models import User
+from cinerec.db.session import get_db
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def create_review(
     return review
 
 
-@router.get("/{movie_id}", response_model=List[schemas.ReviewResponse])
+@router.get("/{movie_id}", response_model=list[schemas.ReviewResponse])
 def get_movie_reviews(
     movie_id: int,
     skip: int = Query(0, ge=0, description="Количество отзывов для пропуска (пагинация)"),

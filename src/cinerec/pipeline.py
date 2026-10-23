@@ -1,17 +1,18 @@
 import os
+
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import logging
 import pickle
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from cinerec.retrieval.base import BaseRetriever
 from cinerec.ranking.base import BaseRanker
 from cinerec.retrieval.als_retriever import ALSRetriever
+from cinerec.retrieval.base import BaseRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,8 @@ class TwoStageRecommender:
 
     def __init__(
         self, 
-        retriever: Optional[BaseRetriever] = None, 
-        ranker: Optional[BaseRanker] = None
+        retriever: BaseRetriever | None = None, 
+        ranker: BaseRanker | None = None
     ) -> None:
         logger.info("Инициализация пайплайна...")
         
@@ -63,7 +64,7 @@ class TwoStageRecommender:
         self.movie_genres = movies.set_index("movieId")[[f"is_{g}" for g in TOP_GENRES]].to_dict(orient="index")
         self.movie_titles = movies.set_index("movieId")[["title", "genres"]].to_dict(orient="index")
 
-    def _get_popular_fallback(self, top_n: int) -> List[Dict[str, Any]]:
+    def _get_popular_fallback(self, top_n: int) -> list[dict[str, Any]]:
         """Возвращает витрину популярных фильмов (Cold Start Fallback)."""
         results = []
         for movie_id in self.popular_movie_ids[:top_n]:
@@ -77,7 +78,7 @@ class TwoStageRecommender:
             })
         return results
 
-    def _calculate_user_features(self, user_ratings: Dict[int, float]) -> Dict[str, float]:
+    def _calculate_user_features(self, user_ratings: dict[int, float]) -> dict[str, float]:
         """Рассчитывает признаки пользователя на лету на основе его оценок из БД."""
         if not user_ratings:
             return {**DEFAULT_USER_STATS, **{f"user_avg_{g}": 3.5 for g in TOP_GENRES}}
@@ -105,10 +106,10 @@ class TwoStageRecommender:
 
     def recommend(
         self, 
-        user_ratings: Dict[int, float], 
+        user_ratings: dict[int, float], 
         top_n: int = 10, 
         retrieval_k: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Генерирует топ-N рекомендаций на основе оценок пользователя (из БД).
         """
@@ -155,7 +156,7 @@ class TwoStageRecommender:
         scores = self.ranker.predict(X_rank)
 
         results = []
-        for item, score in zip(candidates, scores):
+        for item, score in zip(candidates, scores, strict=False):
             movie_id = item["movieId"]
             meta = self.movie_titles.get(movie_id, {"title": "Unknown", "genres": ""})
             results.append({

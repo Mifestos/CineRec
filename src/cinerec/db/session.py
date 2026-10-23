@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from cinerec.core.config import settings
 
 # Создаем движок (echo=False, чтобы не спамить SQL-запросами в консоль)

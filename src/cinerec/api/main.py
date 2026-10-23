@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from cinerec.api.cache import get_redis_client
 from cinerec.api.auth import router as auth_router
+from cinerec.api.cache import get_redis_client
 from cinerec.api.ratings import router as ratings_router
 from cinerec.api.reviews import router as reviews_router
 from cinerec.api.routes import router as recommend_router

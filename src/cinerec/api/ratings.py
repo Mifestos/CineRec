@@ -1,12 +1,13 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from cinerec.api import schemas
 from cinerec.api.dependencies import get_current_user
-from cinerec.db.session import get_db
 from cinerec.db import crud
 from cinerec.db.models import User
+from cinerec.db.session import get_db
 
 router = APIRouter(prefix="/ratings", tags=["Ratings"])
 logger = logging.getLogger(__name__)

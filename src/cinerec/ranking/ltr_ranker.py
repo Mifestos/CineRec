@@ -1,8 +1,11 @@
 import pickle
-import pandas as pd
-import numpy as np
+
 import lightgbm as lgb
+import numpy as np
+import pandas as pd
+
 from cinerec.ranking.base import BaseRanker
+
 
 class LGBMRankerRanker(BaseRanker):
     def __init__(self, **kwargs):

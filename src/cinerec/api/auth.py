@@ -3,9 +3,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from cinerec.api import schemas
+from cinerec.core import security
 from cinerec.db import crud
 from cinerec.db.session import get_db
-from cinerec.core import security
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 

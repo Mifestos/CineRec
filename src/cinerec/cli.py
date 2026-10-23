@@ -1,13 +1,14 @@
 import logging
 from pathlib import Path
+
 import pandas as pd
 import typer
 from rich.console import Console
 from sqlalchemy import text
 
-from cinerec.db.session import engine, SessionLocal
-from cinerec.db.models import Base, User
 from cinerec.core.security import get_password_hash
+from cinerec.db.models import Base, User
+from cinerec.db.session import SessionLocal, engine
 
 app = typer.Typer(help="CineRec Management CLI")
 console = Console()
@@ -38,7 +39,7 @@ def db_seed_movies() -> None:
 
     def insert_on_conflict(table, conn, keys, data_iter):
         """Кастомный метод для to_sql, игнорирующий дубликаты."""
-        data = [dict(zip(keys, row)) for row in data_iter]
+        data = [dict(zip(keys, row, strict=False)) for row in data_iter]
         stmt = pg_insert(table.table).values(data).on_conflict_do_nothing(index_elements=["id"])
         conn.execute(stmt)
 
@@ -58,7 +59,7 @@ def db_seed_movies() -> None:
             "COALESCE((SELECT MAX(id) FROM movies), 0) + 1, false);"
         ))
 
-    console.print(f"[bold green]Movies loaded and sequence synchronized.[/bold green]")
+    console.print("[bold green]Movies loaded and sequence synchronized.[/bold green]")
 
 
 @app.command()

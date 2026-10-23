@@ -1,6 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
 
 # ==========================================
 # Схемы для Аутентификации и Пользователей
@@ -23,7 +25,7 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    user_id: Optional[int] = None
+    user_id: int | None = None
 
 
 # ==========================================
@@ -62,9 +64,9 @@ class ReviewResponse(BaseModel):
     text: str
     
     # Результаты NLP-анализа
-    sentiment: Optional[str] = Field(None, description="Общая тональность (positive/negative/neutral)")
-    sentiment_score: Optional[float] = Field(None, description="Уверенность модели (0.0 - 1.0)")
-    aspects: Optional[Dict[str, Any]] = Field(None, description="Тональность по аспектам (plot, actors, music и т.д.)")
+    sentiment: str | None = Field(None, description="Общая тональность (positive/negative/neutral)")
+    sentiment_score: float | None = Field(None, description="Уверенность модели (0.0 - 1.0)")
+    aspects: dict[str, Any] | None = Field(None, description="Тональность по аспектам (plot, actors, music и т.д.)")
     
     created_at: datetime
 

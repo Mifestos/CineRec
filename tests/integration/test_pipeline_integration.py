@@ -11,6 +11,7 @@ Integration-тесты для проверки реальной связки:
   - Обученные модели (python src/cinerec/ranking/train_ranker.py)
 """
 import pytest
+
 from cinerec.pipeline import TwoStageRecommender
 
 

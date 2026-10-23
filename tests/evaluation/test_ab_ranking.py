@@ -2,12 +2,13 @@
 Offline A/B тест для сравнения классификатора и LTR-ранжировщика.
 Запуск: pytest tests/evaluation/ -m evaluation -v
 """
+import pickle
 import warnings
-import pytest
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import pickle
-from pathlib import Path
+import pytest
 from sklearn.metrics import ndcg_score
 
 from cinerec.pipeline import TwoStageRecommender
@@ -39,7 +40,7 @@ def evaluate_model(
         if len(test_df) == 0:
             continue
 
-        user_ratings_dict = dict(zip(train_df["movieId"], train_df["rating"]))
+        user_ratings_dict = dict(zip(train_df["movieId"], train_df["rating"], strict=False))
         recs = model.recommend(user_ratings_dict, top_n=k)
         if not recs:
             ndcg_scores.append(0.0)

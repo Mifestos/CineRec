@@ -1,4 +1,5 @@
 import os
+
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import logging
@@ -82,7 +83,6 @@ def _add_cross_features(df: pd.DataFrame) -> pd.DataFrame:
     df["popularity_score"] = df["movie_num_ratings"] * df["movie_avg_rating"]
     
     # 3. Взаимодействие пользователь-жанр (и сохранение для pipeline)
-    user_genre_stats = {}
     for genre in TOP_GENRES:
         is_genre_col = f"is_{genre}"
         genre_df = df[df[is_genre_col] == 1]

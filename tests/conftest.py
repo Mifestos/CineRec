@@ -1,16 +1,18 @@
 import os
+
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
+from collections.abc import Generator
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from typing import Generator
-from unittest.mock import patch, AsyncMock, MagicMock
 
 from cinerec.api.main import app
-from cinerec.db.session import get_db
+from cinerec.core.security import create_access_token, get_password_hash
 from cinerec.db.models import Base, User
-from cinerec.core.security import get_password_hash, create_access_token
+from cinerec.db.session import get_db
 
 # Тестовая БД (PostgreSQL)
 SQLALCHEMY_DATABASE_URL = "postgresql://cinerec_user:cinerec_password@localhost:5432/cinerec_test_db"

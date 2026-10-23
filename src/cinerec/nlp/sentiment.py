@@ -1,6 +1,5 @@
 import logging
 import re
-from typing import Dict, Tuple
 
 from transformers import pipeline
 
@@ -23,7 +22,7 @@ _LABEL_MAP = {
 }
 
 # Ключевые слова для ABSA (Aspect-Based Sentiment Analysis)
-ASPECT_KEYWORDS: Dict[str, list[str]] = {
+ASPECT_KEYWORDS: dict[str, list[str]] = {
     "plot": ["сюжет", "история", "сценарий", "поворот", "финал", "концовка", "развязка"],
     "actors": ["актер", "актриса", "игра", "персонаж", "кастинг", "перевоплощение"],
     "music": ["музыка", "саундтрек", "композитор", "мелодия", "звук"],
@@ -32,7 +31,7 @@ ASPECT_KEYWORDS: Dict[str, list[str]] = {
 }
 
 
-def _predict(text: str) -> Tuple[str, float]:
+def _predict(text: str) -> tuple[str, float]:
     """Внутренний вызов модели. Возвращает (категория, уверенность)."""
     try:
         result = _sentiment_pipeline(text[:512])[0]
@@ -43,14 +42,14 @@ def _predict(text: str) -> Tuple[str, float]:
         return "neutral", 0.0
 
 
-def analyze_sentiment(text: str) -> Tuple[str, float]:
+def analyze_sentiment(text: str) -> tuple[str, float]:
     """Анализирует общую тональность текста отзыва."""
     if not text or not text.strip():
         return "neutral", 0.0
     return _predict(text)
 
 
-def analyze_aspects(text: str) -> Dict[str, str]:
+def analyze_aspects(text: str) -> dict[str, str]:
     """
     Aspect-Based Sentiment Analysis.
     Разбивает отзыв на предложения, для каждого аспекта находит релевантные
@@ -60,7 +59,7 @@ def analyze_aspects(text: str) -> Dict[str, str]:
         return {}
 
     sentences = re.split(r"(?<=[.!?])\s+", text)
-    aspects: Dict[str, str] = {}
+    aspects: dict[str, str] = {}
 
     for aspect, keywords in ASPECT_KEYWORDS.items():
         relevant = [

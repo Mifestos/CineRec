@@ -1,0 +1,95 @@
+name: Scheduled ML Tests
+
+on:
+  # Запуск раз в сутки в 03:00 UTC (06:00 МСК)
+  schedule:
+    - cron: '0 3 * * *'
+  
+  # Ручной запуск из вкладки Actions на GitHub
+  workflow_dispatch:
+
+jobs:
+  integration-and-evaluation:
+    name: Integration + Evaluation Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cinerec_user
+          POSTGRES_PASSWORD: cinerec_password
+          POSTGRES_DB: cinerec_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Download MovieLens 25M dataset
+        run: |
+          mkdir -p data/raw
+          curl -L -o /tmp/ml-25m.zip https://files.grouplens.org/datasets/movielens/ml-25m.zip
+          unzip -q /tmp/ml-25m.zip -d /tmp/
+          mv /tmp/ml-25m/*.csv data/raw/
+          ls -la data/raw/
+
+      - name: Train ALS model
+        env:
+          DATABASE_URL: postgresql://cinerec_user:cinerec_password@localhost:5432/cinerec_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci_scheduled_tests_secret_key
+        run: |
+          python src/cinerec/retrieval/train_als.py
+
+      - name: Generate ranking features
+        run: |
+          python src/cinerec/ranking/features.py
+
+      - name: Train ranker models
+        run: |
+          python src/cinerec/ranking/train_ranker.py
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://cinerec_user:cinerec_password@localhost:5432/cinerec_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci_scheduled_tests_secret_key
+        run: |
+          pytest tests/integration/ -m integration -v
+
+      - name: Run evaluation tests
+        env:
+          DATABASE_URL: postgresql://cinerec_user:cinerec_password@localhost:5432/cinerec_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci_scheduled_tests_secret_key
+        run: |
+          pytest tests/evaluation/ -m evaluation -v
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-results
+          path: |
+            models/*.pkl
+            models/*.npz

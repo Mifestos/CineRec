@@ -6,7 +6,8 @@
     Открыть http://localhost:8089
 """
 import random
-from locust import HttpUser, task, between
+
+from locust import HttpUser, between, task
 
 
 class RecommenderUser(HttpUser):

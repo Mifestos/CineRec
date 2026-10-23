@@ -1,21 +1,20 @@
 import json
 import logging
-from typing import List
 
-from fastapi import APIRouter, HTTPException, Query, Request, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from cinerec.api.schemas import MovieRecommendation
 from cinerec.api.dependencies import get_current_user
-from cinerec.db.session import get_db
+from cinerec.api.schemas import MovieRecommendation
 from cinerec.db import crud
 from cinerec.db.models import User
+from cinerec.db.session import get_db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/recommend", response_model=List[MovieRecommendation])
+@router.get("/recommend", response_model=list[MovieRecommendation])
 async def get_personal_recommendations(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -55,4 +54,4 @@ async def get_personal_recommendations(
 
     except Exception as e:
         logger.error("Recommendation failed for user_id=%s: %s", user_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
