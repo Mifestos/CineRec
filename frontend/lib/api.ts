@@ -1,11 +1,11 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: '/api', // Используем наш rewrite прокси
+  baseURL: '/api', 
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Критически важно для httpOnly cookies
+  withCredentials: true, 
 });
 
 // Интерсептор для обработки 401 (Unauthorized)
