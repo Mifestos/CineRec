@@ -4,7 +4,7 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Рекомендательная система с поддержкой пользовательского контента (UGC), двухэтапным пайплайном retrieval и ranking, а также Aspect-Based Sentiment Analysis (ABSA) для обработки отзывов.
+Full-stack рекомендательная система с поддержкой пользовательского контента (UGC), двухэтапным пайплайном retrieval/ranking и Aspect-Based Sentiment Analysis (ABSA) для обработки отзывов.
 
 ## Архитектура
 
@@ -18,7 +18,8 @@
 - **NLP-слой.** Русскоязычная модель RuBERT выполняет аспектный анализ тональности отзывов. Пайплайн извлекает тональность по конкретным аспектам (сюжет, актёры, музыка), а не единый скор по документу.
 - **Cold start fallback.** Пользователи с менее чем 5 оценками получают ранжирование по популярности (топ-50 по взвешенному рейтингу) вместо 404.
 - **Кэширование.** Redis кэширует ответы API с TTL 300 секунд. Ключи кэша привязаны к пользователю и параметру `top_n`.
-- **Аутентификация.** JWT-аутентификация с OAuth2 password flow. Пароли хэшируются bcrypt. Защищённые эндпоинты используют dependency injection FastAPI.
+- **Аутентификация.** JWT-аутентификация с OAuth2 password flow. Пароли хэшируются bcrypt. Токен передаётся через `httpOnly` cookie.
+- **Reverse Proxy.** Nginx выступает единой точкой входа. Запросы `/api/*` проксируются на FastAPI, остальные — на Next.js.
 
 ## Стек
 
@@ -27,10 +28,10 @@
 | ML / Data | Python 3.12, Pandas, Implicit (ALS), LightGBM (LTR), Scikit-learn, PyArrow |
 | NLP | HuggingFace Transformers, RuBERT |
 | Backend | FastAPI, Uvicorn, Pydantic v2, python-jose, bcrypt |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, shadcn/ui, TanStack Query |
 | Хранилище | PostgreSQL 16, SQLAlchemy 2.0, Alembic, Redis 7 |
-| DevOps | Docker, Docker Compose, GitHub Actions, GHCR |
+| DevOps | Docker, Docker Compose, Nginx, GitHub Actions, GHCR |
 | Тестирование | Pytest, pytest-mock, pytest-cov, Locust |
-
 ## Метрики
 
 | Метрика | Значение |
@@ -53,21 +54,22 @@
 Репозиторий использует `src`-layout с разделением слоёв по ответственности.
 
 ```text
-src/cinerec/
-├── api/          Роутеры FastAPI, схемы Pydantic, зависимости аутентификации
-├── core/         Конфигурация (Pydantic Settings), утилиты JWT/security
-├── db/           ORM-модели SQLAlchemy, CRUD, управление сессиями
-├── nlp/          Обёртка над инференсом RuBERT, логика ABSA
-├── ranking/      Feature engineering, обучение LightGBM
-├── retrieval/    Обучение ALS, онлайн-генерация кандидатов
-└── pipeline.py   Оркестратор TwoStageRecommender
-
-tests/
-├── unit/         Изолированные тесты бизнес-логики (моки зависимостей)
-├── api/          Тесты HTTP-эндпоинтов через TestClient
-├── integration/  Тесты реального пайплайна (требуют обученных моделей)
-├── evaluation/   Офлайн A/B тесты (метрика NDCG)
-└── load/         Сценарии нагрузочного тестирования Locust
+├── frontend/               # Next.js приложение (UI)
+│   ├── app/                # App Router (страницы и layout)
+│   ├── components/         # UI-компоненты (shadcn/ui)
+│   └── lib/                # API-клиент, Zustand store, типы
+├── nginx/                  # Конфигурация Reverse Proxy
+├── src/cinerec/            # Backend (Python)
+│   ├── api/                # Роутеры FastAPI, схемы Pydantic
+│   ├── core/               # Конфигурация, утилиты JWT/security
+│   ├── db/                 # ORM-модели SQLAlchemy, CRUD
+│   ├── nlp/                # Инференс RuBERT, логика ABSA
+│   ├── ranking/            # Feature engineering, обучение LightGBM
+│   ├── retrieval/          # Обучение ALS, онлайн-генерация
+│   └── pipeline.py         # Оркестратор TwoStageRecommender
+├── tests/                  # Pytest тесты (unit, api, integration, evaluation, load)
+├── docker-compose.yml      # Оркестрация контейнеров (Nginx, Frontend, API, DB, Redis)
+└── Dockerfile              # Сборка бэкенда
 ```
 ## Запуск
 Требуется Docker Desktop.
@@ -87,13 +89,14 @@ cp .env.example .env
 ```bash
 docker compose up -d --build
 ```
-Применение миграций и загрузка данных:
-
+Применение миграций, загрузка данных и создание тестового пользователя:
 ```bash
-docker compose exec api python -m cinerec.cli db-init
+ddocker compose exec api python -m cinerec.cli db-init
 docker compose exec api python -m cinerec.cli db-seed-movies
+docker compose exec api python -m cinerec.cli create-user testuser test@example.com strongpassword123
 ```
-API доступно по адресу http://localhost:8000. Документация OpenAPI — http://localhost:8000/docs.
+Приложение доступно по адресу http://localhost (через Nginx).
+Документация OpenAPI (Swagger) — http://localhost/api/docs.
 
 ## Тестирование
 ### Доступные команды (через make):
@@ -141,10 +144,12 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 ## Roadmap
 ```text
 ☑ Переход с офлайн-батчинга на UGC-модель (PostgreSQL)
-☑ Добавление JWT-аутентификации
+☑ Добавление JWT-аутентификации и httpOnly cookies
 ☑ Интеграция NLP-пайплайна на базе ABSA
-□ Замена ALS на Two-Tower нейросеть (PyTorch) для retrieval
-□ Вынос NLP-инференса в воркер Celery для восстановления пропускной способности
+☑ Внедрение Reverse Proxy (Nginx) и полноценного Frontend (Next.js)
+□ Content-Based Fallback для решения проблемы Item Cold Start (новые фильмы)
+□ Замена ALS на Two-Tower нейросеть (PyTorch) для улучшения качества Retrieval
+□ Вынос NLP-инференса в воркер Celery для восстановления пропускной способности (RPS > 300)
 ```
 ## Автор
 Mifestos — Data Scientist / ML Engineer

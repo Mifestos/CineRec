@@ -13,16 +13,15 @@ def test_create_review_success(
     test_movie
 ):
     """Тест: успешное создание отзыва с NLP-анализом (замоканным)."""
-    # Настраиваем моки NLP
     mock_analyze_sentiment.return_value = ("positive", 0.95)
     mock_analyze_aspects.return_value = {"plot": "positive", "actors": "negative"}
 
     response = client.post(
-        "/reviews/",
+        "/api/reviews/",
         headers=auth_headers,
         json={
             "movie_id": test_movie.id,
-            "text": "Отличный сюжет, но актеры слабые."  # Длина >= 10
+            "text": "Отличный сюжет, но актеры слабые."
         }
     )
 
@@ -45,20 +44,18 @@ def test_update_existing_review(
     test_movie
 ):
     """Тест: повторная отправка отзыва на тот же фильм обновляет его."""
-    # Первый отзыв
     mock_analyze_sentiment.return_value = ("positive", 0.9)
     mock_analyze_aspects.return_value = {"plot": "positive"}
     client.post(
-        "/reviews/",
+        "/api/reviews/",
         headers=auth_headers,
         json={"movie_id": test_movie.id, "text": "Хороший фильм, отличный сюжет."}
     )
 
-    # Обновляем отзыв
     mock_analyze_sentiment.return_value = ("negative", 0.8)
     mock_analyze_aspects.return_value = {"plot": "negative"}
     response = client.post(
-        "/reviews/",
+        "/api/reviews/",
         headers=auth_headers,
         json={"movie_id": test_movie.id, "text": "На самом деле сюжет ужасен и скучен."}
     )
@@ -70,9 +67,9 @@ def test_update_existing_review(
 def test_create_review_too_short(client, auth_headers, test_movie):
     """Тест: текст отзыва меньше 10 символов отклоняется (422)."""
     response = client.post(
-        "/reviews/",
+        "/api/reviews/",
         headers=auth_headers,
-        json={"movie_id": test_movie.id, "text": "Ужас"}  # < 10 символов
+        json={"movie_id": test_movie.id, "text": "Ужас"}
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -80,7 +77,7 @@ def test_create_review_too_short(client, auth_headers, test_movie):
 def test_create_review_movie_not_found(client, auth_headers):
     """Тест: отзыв на несуществующий фильм (404)."""
     response = client.post(
-        "/reviews/",
+        "/api/reviews/",
         headers=auth_headers,
         json={"movie_id": 999_999, "text": "Этот фильм я никогда не видел, но напишу отзыв."}
     )
@@ -90,7 +87,7 @@ def test_create_review_movie_not_found(client, auth_headers):
 def test_create_review_without_auth(client, test_movie):
     """Тест: создание отзыва без токена (401)."""
     response = client.post(
-        "/reviews/",
+        "/api/reviews/",
         json={"movie_id": test_movie.id, "text": "Анонимный отзыв на фильм."}
     )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -109,15 +106,13 @@ def test_get_movie_reviews(
     mock_analyze_sentiment.return_value = ("neutral", 0.5)
     mock_analyze_aspects.return_value = {}
     
-    # Создаем отзыв
     client.post(
-        "/reviews/",
+        "/api/reviews/",
         headers=auth_headers,
         json={"movie_id": test_movie.id, "text": "Нормальный фильм, можно посмотреть."}
     )
 
-    # Получаем отзывы БЕЗ токена (эндпоинт публичный)
-    response = client.get(f"/reviews/{test_movie.id}")
+    response = client.get(f"/api/reviews/{test_movie.id}")
     
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
