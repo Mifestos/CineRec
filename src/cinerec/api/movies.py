@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from cinerec.db.session import get_db
-from cinerec.db import crud
+
 from cinerec.api import schemas
+from cinerec.db import crud
+from cinerec.db.session import get_db
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 

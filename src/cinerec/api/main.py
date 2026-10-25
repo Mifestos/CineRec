@@ -7,10 +7,10 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from cinerec.api.auth import router as auth_router
 from cinerec.api.cache import get_redis_client
+from cinerec.api.movies import router as movies_router
 from cinerec.api.ratings import router as ratings_router
 from cinerec.api.reviews import router as reviews_router
 from cinerec.api.routes import router as recommend_router
-from cinerec.api.movies import router as movies_router
 from cinerec.pipeline import TwoStageRecommender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
