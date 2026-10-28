@@ -16,3 +16,6 @@ src/cinerec.egg-info/
 mlflow.db
 mlruns/
 cookies.txt
+models/two_tower/
+models/*.pt
+models/*.npy
