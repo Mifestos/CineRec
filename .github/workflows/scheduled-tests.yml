@@ -1,11 +1,8 @@
 name: Scheduled ML Tests
 
 on:
-  # Запуск раз в сутки в 03:00 UTC (06:00 МСК)
   schedule:
     - cron: '0 3 * * *'
-  
-  # Ручной запуск из вкладки Actions на GitHub
   workflow_dispatch:
 
 jobs:
@@ -45,12 +42,13 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -e .
 
-      - name: Download MovieLens 25M dataset
+      # ВАЖНО: Используем small датасет (1 МБ) вместо 25M, чтобы не получить OOM
+      - name: Download MovieLens Small dataset
         run: |
           mkdir -p data/raw
-          curl -L -o /tmp/ml-25m.zip https://files.grouplens.org/datasets/movielens/ml-25m.zip
-          unzip -q /tmp/ml-25m.zip -d /tmp/
-          mv /tmp/ml-25m/*.csv data/raw/
+          curl -L -o /tmp/ml-latest-small.zip https://files.grouplens.org/datasets/movielens/ml-latest-small.zip
+          unzip -q /tmp/ml-latest-small.zip -d /tmp/
+          mv /tmp/ml-latest-small/*.csv data/raw/
           ls -la data/raw/
 
       - name: Train ALS model
@@ -59,10 +57,12 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: ci_scheduled_tests_secret_key
         run: |
-          python src/cinerec/retrieval/train_als.py
+          # Исправленный путь после рефакторинга
+          python src/cinerec/retrieval/als/train.py
 
       - name: Generate ranking features
         run: |
+          # На small датасете это займет секунды
           python src/cinerec/ranking/features.py
 
       - name: Train ranker models
@@ -84,12 +84,3 @@ jobs:
           SECRET_KEY: ci_scheduled_tests_secret_key
         run: |
           pytest tests/evaluation/ -m evaluation -v
-
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: evaluation-results
-          path: |
-            models/*.pkl
-            models/*.npz

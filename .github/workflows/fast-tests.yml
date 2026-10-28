@@ -2,9 +2,9 @@ name: Fast Tests (Lint + Unit + API)
 
 on:
   push:
-    branches: [ "main", "develop", "v2.0-develop" ]
+    branches: [ "main", "develop", "v2.0-develop", "v3.0-develop" ]
   pull_request:
-    branches: [ "main", "v2.0-develop" ]
+    branches: [ "main", "v2.0-develop", "v3.0-develop" ]
 
 jobs:
   lint:
