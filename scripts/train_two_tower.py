@@ -3,7 +3,7 @@ import logging
 
 import torch
 
-from cinerec.retrieval.two_tower.train import train_two_tower
+from cinerec.retrieval.experimental.two_tower.train import train_two_tower
 
 logging.basicConfig(
     level=logging.INFO,

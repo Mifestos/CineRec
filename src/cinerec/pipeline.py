@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from cinerec.ranking.base import BaseRanker
-from cinerec.retrieval.als_retriever import ALSRetriever
+from cinerec.retrieval.als import ALSRetriever
 from cinerec.retrieval.base import BaseRetriever
 
 logger = logging.getLogger(__name__)

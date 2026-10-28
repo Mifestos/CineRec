@@ -12,7 +12,7 @@ import pytest
 from sklearn.metrics import ndcg_score
 
 from cinerec.pipeline import TwoStageRecommender
-from cinerec.retrieval.als_retriever import ALSRetriever
+from cinerec.retrieval.als import ALSRetriever
 
 MODEL_DIR = Path("models")
 DATA_DIR = Path("data/raw")

@@ -1,7 +1,7 @@
 """Smoke test для Two-Tower модели."""
 import torch
-from cinerec.retrieval.two_tower.dataset import TwoTowerDataset, load_movie_features
-from cinerec.retrieval.two_tower.model import TwoTowerModel
+from cinerec.retrieval.experimental.two_tower.dataset import TwoTowerDataset, load_movie_features
+from cinerec.retrieval.experimental.two_tower.model import TwoTowerModel
 
 ds = TwoTowerDataset()
 features, movie_ids = load_movie_features()

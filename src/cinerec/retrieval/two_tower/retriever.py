@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from cinerec.retrieval.base import BaseRetriever
-from cinerec.retrieval.two_tower.model import TwoTowerModel
+from cinerec.retrieval.experimental.two_tower.model import TwoTowerModel
 
 logger = logging.getLogger(__name__)
 

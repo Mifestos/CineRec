@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from cinerec.retrieval.als_retriever import ALSRetriever
+from cinerec.retrieval.als import ALSRetriever
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 """Smoke test для TwoTowerRetriever — сравнение с ALS."""
 import logging
-from cinerec.retrieval.two_tower.retriever import TwoTowerRetriever
+from cinerec.retrieval.experimental.two_tower.retriever import TwoTowerRetriever
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
