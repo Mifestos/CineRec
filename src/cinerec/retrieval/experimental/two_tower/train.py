@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from cinerec.retrieval.experimental.two_tower.dataset import TwoTowerDataset, load_movie_features
-from cinerec.retrieval.experimental.two_tower.model import TwoTowerModel
 from cinerec.retrieval.experimental.two_tower.loss import InfoNCELoss
+from cinerec.retrieval.experimental.two_tower.model import TwoTowerModel
 
 logger = logging.getLogger(__name__)
 

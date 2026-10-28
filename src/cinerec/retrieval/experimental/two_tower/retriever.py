@@ -9,7 +9,7 @@ TwoTowerRetriever — реализация BaseRetriever на обученной
 import logging
 import pickle
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 import numpy as np
 import torch
@@ -65,7 +65,7 @@ class TwoTowerRetriever(BaseRetriever):
     def _get_user_embedding(
         self,
         user_id: int,
-        user_ratings: Dict[int, float] | None = None,
+        user_ratings: dict[int, float] | None = None,
     ) -> torch.Tensor:
         """
         Возвращает L2-normalized user embedding (1, dim).
@@ -97,8 +97,8 @@ class TwoTowerRetriever(BaseRetriever):
             return user_emb
 
     def recommend_for_ratings(
-        self, user_ratings: Dict[int, float], top_k: int
-    ) -> List[Dict[str, Any]]:
+        self, user_ratings: dict[int, float], top_k: int
+    ) -> list[dict[str, Any]]:
         """Онлайн-рекомендации на основе оценок пользователя."""
         # Используем user_id из словаря (первый ключ)
         user_id = next(iter(user_ratings), 0)
@@ -106,17 +106,17 @@ class TwoTowerRetriever(BaseRetriever):
 
     def recommend(
         self, user_id: int, top_k: int, filter_already_liked: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Офлайн-рекомендации для пользователя из датасета (без истории из БД)."""
         return self._recommend_internal(user_id, None, top_k, filter_already_liked)
 
     def _recommend_internal(
         self,
         user_id: int,
-        user_ratings: Dict[int, float] | None,
+        user_ratings: dict[int, float] | None,
         top_k: int,
         filter_already_liked: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Общая логика рекомендаций."""
         user_emb = self._get_user_embedding(user_id, user_ratings)  # (1, dim)
         
@@ -136,5 +136,5 @@ class TwoTowerRetriever(BaseRetriever):
         
         return [
             {"movieId": int(self.idx_to_movie[int(idx)]), "score": float(score)}
-            for idx, score in zip(top_indices, top_scores)
+            for idx, score in zip(top_indices, top_scores, strict=False)
         ]

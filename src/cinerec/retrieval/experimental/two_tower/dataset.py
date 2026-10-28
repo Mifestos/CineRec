@@ -53,7 +53,7 @@ class TwoTowerDataset(Dataset):
         )
 
         # Плоский список пар (user, positive) для итерации
-        self.pairs = list(zip(positives["user_idx"], positives["movie_idx"]))
+        self.pairs = list(zip(positives["user_idx"], positives["movie_idx"], strict=False))
         logger.info("Пар (user, positive): %d", len(self.pairs))
 
     def __len__(self) -> int:
